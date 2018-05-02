@@ -6,7 +6,7 @@
 
 ## Getting started
 
-JsonSlicer is a Go json library, which aims to enable fast jsonpath sub-object cut.
+JsonSlice is a Go json library, which aims to enable fast jsonpath sub-object cut.
 
 ## Spec
 

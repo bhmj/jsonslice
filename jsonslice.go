@@ -40,9 +40,8 @@ import (
 */
 
 const (
-	// intermediate node
-	cArrayType = 1 << iota // []
-	cValueType = 1 << iota // {} or 123
+	// array node
+	cArrayType = 1 << iota
 	// array properties
 	cArrBounded = 1 << iota // bounded [x:y] or indexed [x]
 	// terminal node
@@ -51,11 +50,10 @@ const (
 
 type tToken struct {
 	Key   string
-	Type  int8 // ArrayType/ValueType | ArrBounded
+	Type  int8 // properties
 	Left  int  // >=0 index from the start, <0 backward index from the end
 	Right int  // 0 till the end inclusive, >0 to index exclusive, <0 backward index from the end exclusive
-
-	Next *tToken
+	Next  *tToken
 }
 
 // Get the jsonpath subset of the input
@@ -76,6 +74,7 @@ func Get(input []byte, path string) ([]byte, error) {
 func parsePath(path []byte) (*tToken, error) {
 	tok := &tToken{}
 	i := 0
+	ind := 0
 	l := len(path)
 	if l == 0 {
 		return nil, errors.New("element expected")
@@ -86,17 +85,13 @@ func parsePath(path []byte) (*tToken, error) {
 	tok.Key = string(path[:i])
 	// type
 	if i == l {
-		tok.Type |= cIsTerminal | cValueType
+		tok.Type |= cIsTerminal
 		return tok, nil
 	}
 	if path[i] == '[' {
 		tok.Type = cArrayType
 		i++
-		ind := 0
-		for ch := path[i]; i < l && ch >= '0' && ch <= '9'; ch = path[i] {
-			ind = ind*10 + int(ch-'0')
-			i++
-		}
+		ind, i = readNumber(path, i)
 		if i == l {
 			return nil, errors.New("']' expected (1)")
 		}
@@ -108,11 +103,7 @@ func parsePath(path []byte) (*tToken, error) {
 		if path[i] == ':' {
 			tok.Type |= cArrBounded
 			i++
-			ind = 0
-			for ch := path[i]; i < l && ch >= '0' && ch <= '9'; ch = path[i] {
-				ind = ind*10 + int(ch-'0')
-				i++
-			}
+			ind, i = readNumber(path, i)
 			if i == l {
 				return nil, errors.New("']' expected (2)")
 			}
@@ -128,7 +119,7 @@ func parsePath(path []byte) (*tToken, error) {
 		}
 	}
 	if tok.Type&cArrBounded > 0 && tok.Type&cIsTerminal == 0 {
-
+		return nil, errors.New("indefinite references are not yet supported")
 	}
 	if path[i] != '.' {
 		return nil, errors.New("invalid element reference")
@@ -143,80 +134,61 @@ func parsePath(path []byte) (*tToken, error) {
 	return tok, nil
 }
 
-// input is at value ('{' or 123)
-func getValue(input []byte, tok *tToken) ([]byte, error) {
+func getValue(input []byte, tok *tToken) (result []byte, err error) {
 	if len(input) == 0 {
 		return nil, errors.New("unexpected end of file")
 	}
-	if input[0] != '{' {
-		return nil, errors.New("not an object")
+	if input[0] != '{' && input[0] != '[' {
+		return nil, errors.New("object or array expected")
 	}
-	i := 0
 	if tok.Key != "$" {
-		// seek to the key
-		l := len(input)
-		for i < l {
-			var p []byte
-			p, i = nextKey(input, i)
-			if string(p) == tok.Key {
-				break
-			}
-		}
-		if i == l {
-			return nil, errors.New("key " + tok.Key + " not found")
+		// find the key
+		input, err = getKeyValue(input, tok.Key)
+		if err != nil {
+			return nil, err
 		}
 	}
 	// check value type
-	switch valueType(input[i:]) {
-	case '[':
-		if tok.Type&cArrayType == 0 {
-			return nil, errors.New("object expected at " + tok.Key)
-		}
-	case '{':
-		if tok.Type&cArrayType > 0 {
-			return nil, errors.New("array expected at " + tok.Key)
-		}
-	case '1':
-		fallthrough
-	case '"':
-		fallthrough
-	case 'b':
-		if tok.Type&cIsTerminal == 0 {
-			return nil, errors.New("complex type expected at " + tok.Key)
-		}
-	default:
-		return nil, errors.New("invalid value at key " + tok.Key)
+	if err = checkValueType(input, tok); err != nil {
+		return nil, err
 	}
+
 	// here we are at the beginning of a value
-	return input, nil
+
+	if tok.Type&cArrayType > 0 {
+		input, err = sliceArray(input, tok)
+	} else {
+		input, err = sliceValue(input)
+	}
+	if tok.Type&cIsTerminal > 0 {
+		return input, nil
+	}
+	if tok.Type&cArrayType == 0 {
+		return getValue(input, tok.Next)
+	}
+	return getValues(input, tok)
 }
 
-func valueType(input []byte) byte {
-	if input[0] == '{' {
-		return '{'
-	}
-	if input[0] == '[' {
-		return '['
-	}
-	if input[0] == '-' {
-		if input[1] >= '0' && input[1] <= '9' {
-			return '1'
-		}
-	}
-	if input[0] >= '0' && input[0] <= '9' {
-		return '1'
-	}
-	if input[0] >= '"' {
-		return '"'
-	}
-	if input[0] == 't' || input[0] == 'f' || input[0] == 'n' {
-		return 'b'
-	}
-	return 'x'
+func getKeyValue(input []byte, key string) ([]byte, error) {
+	return nil, nil
 }
 
-// get input and current position
-// return next key and new position
+func checkValueType(input []byte, tok *tToken) error {
+	if len(input) < 2 {
+		return errors.New("unexpected end of input")
+	}
+	if input[0] == '[' && tok.Type&cArrayType == 0 {
+		return errors.New("object expected at " + tok.Key)
+	} else if input[0] == '{' && tok.Type&cArrayType > 0 {
+		return errors.New("array expected at " + tok.Key)
+	} else if tok.Type&cIsTerminal == 0 {
+		return errors.New("complex type expected at " + tok.Key)
+	}
+	return nil
+}
+
+// get input and current value position
+// return next key and new value position
 const keySeek = 1
 const keyOpen = 2
 const keyClose = 4
@@ -242,6 +214,21 @@ func nextKey(input []byte, i int) ([]byte, int) {
 		}
 	}
 	return nil, i
+}
+
+func readNumber(path []byte, i int) (int, int) {
+	sign := 1
+	l := len(path)
+	ind := 0
+	for ch := path[i]; i < l && (ch == '-' || (ch >= '0' && ch <= '9')); ch = path[i] {
+		if ch == '-' {
+			sign = -1
+		} else {
+			ind = ind*10 + int(ch-'0')
+		}
+		i++
+	}
+	return ind * sign, i
 }
 
 func main() {
