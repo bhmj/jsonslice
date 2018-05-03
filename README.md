@@ -6,7 +6,7 @@
 
 ## Getting started
 
-JsonSlice is a Go json library, which aims to enable fast jsonpath sub-object cut.
+JsonSlice is a Go json library which allows to execute fast jsonpath queries without unmarshalling the whole data.
 
 ## Spec
 
@@ -15,5 +15,4 @@ JsonSlice is a Go json library, which aims to enable fast jsonpath sub-object cu
 ## Examples
 
 ## Restrictions
-
 

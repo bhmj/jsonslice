@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 )
 
 /*
@@ -135,6 +136,13 @@ func parsePath(path []byte) (*tToken, error) {
 }
 
 func getValue(input []byte, tok *tToken) (result []byte, err error) {
+	// skip spaces
+	i := 0
+	l := len(input)
+	for ch := input[i]; i < l && (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'); ch = input[i] {
+		i++
+	}
+	input = input[i:]
 	if len(input) == 0 {
 		return nil, errors.New("unexpected end of file")
 	}
@@ -155,52 +163,201 @@ func getValue(input []byte, tok *tToken) (result []byte, err error) {
 
 	// here we are at the beginning of a value
 
+	if tok.Type&cIsTerminal > 0 {
+		if tok.Type&cArrayType > 0 {
+			return sliceArray(input, tok)
+		}
+		eoe, err := skipValue(input, 0)
+		if err != nil {
+			return nil, err
+		}
+		return input[:eoe], nil
+	}
 	if tok.Type&cArrayType > 0 {
 		input, err = sliceArray(input, tok)
-	} else {
-		input, err = sliceValue(input)
 	}
-	if tok.Type&cIsTerminal > 0 {
-		return input, nil
-	}
-	if tok.Type&cArrayType == 0 {
-		return getValue(input, tok.Next)
-	}
-	return getValues(input, tok)
+	return getValue(input, tok.Next)
 }
 
-// getKeyValue: seek to the key specified
+const keySeek = 1
+const keyOpen = 2
+const keyClose = 4
+
+// getKeyValue: find the key and seek to the value
 func getKeyValue(input []byte, key string) ([]byte, error) {
+	var err error
 	if input[0] != '{' {
 		return nil, errors.New("object expected")
 	}
-	return nil, nil
+
+	i := 1
+	l := len(input)
+
+	for i < l && input[i] != '}' {
+		state := keySeek
+		k := make([]byte, 0)
+		for ch := input[i]; i < l && state != keyClose; ch = input[i] {
+			switch state {
+			case keySeek:
+				if ch == '"' {
+					state = keyOpen
+				}
+			case keyOpen:
+				if ch == '"' {
+					state = keyClose
+				} else {
+					k = append(k, byte(ch))
+				}
+			}
+			i++
+		}
+
+		if state == keyClose {
+			i, err = seekToValue(input, i)
+			if err != nil {
+				return nil, err
+			}
+			if key == string(k) {
+				return input[i:], nil
+			}
+			i, err = skipValue(input, i)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return nil, errors.New("field " + key + " not found")
 }
 
-// sliceArray: select node(s) by bound(s)
+// sliceArray select node(s) by bound(s)
 func sliceArray(input []byte, tok *tToken) ([]byte, error) {
+	l := len(input)
+	i := 1 // skip '['
+	pos := 0
+	for ch := input[i]; i < l && ch != ']'; ch = input[i] {
+		eoe, err := skipValue(input, i)
+		if err != nil {
+			return nil, err
+		}
+		if pos == tok.Left {
+			return input[1:eoe], nil
+		}
+		i++
+	}
+	if i == l {
+		return nil, errors.New("array index out of bounds")
+	}
 	return nil, nil
 }
 
 // sliceValue: slice a single value
 func sliceValue(input []byte) ([]byte, error) {
-	return nil, nil
+	eoe, err := skipValue(input, 0)
+	if err != nil {
+		return nil, err
+	}
+	return input[:eoe], nil
 }
 
 // getValues: get (sub-)values from array
 func getValues(input []byte, tok *tToken) ([]byte, error) {
-	return nil, nil
+	return nil, errors.New("not yet supported")
+}
+
+func seekToValue(input []byte, i int) (int, error) {
+	l := len(input)
+	// spaces
+	for ch := input[i]; i < l && ch != ':'; ch = input[i] {
+		i++
+	}
+	// colon
+	if i == l {
+		return 0, errors.New("unexpected end of input")
+	}
+	i++
+	// spaces
+	for ch := input[i]; i < l && (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'); ch = input[i] {
+		i++
+	}
+	if i == l {
+		return 0, errors.New("unexpected end of input")
+	}
+	return i, nil
+}
+
+func skipValue(input []byte, i int) (int, error) {
+	l := len(input)
+	if i == l {
+		return 0, errors.New("unexpected end of input")
+	}
+	// spaces
+	for ch := input[i]; i < l && (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'); ch = input[i] {
+		i++
+	}
+	if i == l {
+		return 0, errors.New("unexpected end of input")
+	}
+	if input[i] == '"' {
+		// string
+		prev := byte('"')
+		done := false
+		i++
+		for ch := input[i]; i < l && !done; ch = input[i] {
+			if ch == '"' && prev != '\\' {
+				done = true
+			}
+			prev = ch
+			i++
+		}
+		if i == l {
+			return 0, errors.New("unexpected end of input")
+		}
+	} else if input[i] == '{' || input[i] == '[' {
+		// object or array
+		mark := input[i]
+		unmark := mark + 2
+		nested := 0
+		instr := false
+		prev := mark
+		i++
+		for ch := input[i]; i < l && !(ch == unmark && nested == 0); ch = input[i] {
+			if ch == '"' {
+				if prev != '\\' {
+					instr = !instr
+				}
+			} else if !instr {
+				if ch == mark {
+					nested++
+				} else if ch == unmark {
+					nested--
+				}
+			}
+			prev = ch
+			i++
+		}
+		if i == l {
+			return 0, errors.New("unexpected end of input")
+		}
+		i++ // closing mark
+	} else {
+		// number, bool, null
+		for ch := input[i]; i < l && ch != ',' && ch != '}'; ch = input[i] {
+			i++
+		}
+	}
+	return i, nil
 }
 
 func checkValueType(input []byte, tok *tToken) error {
 	if len(input) < 2 {
 		return errors.New("unexpected end of input")
 	}
-	if input[0] == '[' && tok.Type&cArrayType == 0 {
+	ch := input[0]
+	if ch == '[' && tok.Type&cArrayType == 0 && tok.Type&cIsTerminal == 0 {
 		return errors.New("object expected at " + tok.Key)
-	} else if input[0] == '{' && tok.Type&cArrayType > 0 {
+	} else if ch == '{' && tok.Type&cArrayType > 0 {
 		return errors.New("array expected at " + tok.Key)
-	} else if tok.Type&cIsTerminal == 0 {
+	} else if ch != '{' && ch != '[' && tok.Type&cIsTerminal == 0 {
 		return errors.New("complex type expected at " + tok.Key)
 	}
 	return nil
@@ -208,9 +365,6 @@ func checkValueType(input []byte, tok *tToken) error {
 
 // get input and current value position
 // return next key and new value position
-const keySeek = 1
-const keyOpen = 2
-const keyClose = 4
 
 func nextKey(input []byte, i int) ([]byte, int) {
 	status := keySeek
@@ -250,17 +404,8 @@ func readNumber(path []byte, i int) (int, int) {
 	return ind * sign, i
 }
 
-func main() {
-	data := []byte(`
-		{
-			"store": {
-				"book": [
-					{
-						"category": "reference",
-						"author": "Nigel Rees",
-						"title": "Sayings of the Century",
-						"price": 8.95
-					},
+/*
+,
 					{
 						"category": "fiction",
 						"author": "Evelyn Waugh",
@@ -280,6 +425,18 @@ func main() {
 						"title": "The Lord of the Rings",
 						"isbn": "0-395-19395-8",
 						"price": 22.99
+					}*/
+
+func main() {
+	data := []byte(`
+		{
+			"store": {
+				"book": [
+					{
+						"category": "reference",
+						"author": "Nigel Rees",
+						"title": "Sayings of the Century",
+						"price": 8.95
 					}
 				],
 				"bicycle": {
@@ -291,7 +448,14 @@ func main() {
 		}
 	`)
 
-	s, err := Get(data, "$.book[0].title")
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: jsonslice <jsonpath>\n  ex: $.store.book[0].author")
+		return
+	}
+
+	arg := os.Args[1]
+
+	s, err := Get(data, arg)
 
 	if err != nil {
 		fmt.Println(err)
