@@ -142,7 +142,7 @@ func getValue(input []byte, tok *tToken) (result []byte, err error) {
 		return nil, errors.New("object or array expected")
 	}
 	if tok.Key != "$" {
-		// find the key
+		// find the key and seek to the value
 		input, err = getKeyValue(input, tok.Key)
 		if err != nil {
 			return nil, err
@@ -169,7 +169,26 @@ func getValue(input []byte, tok *tToken) (result []byte, err error) {
 	return getValues(input, tok)
 }
 
+// getKeyValue: seek to the key specified
 func getKeyValue(input []byte, key string) ([]byte, error) {
+	if input[0] != '{' {
+		return nil, errors.New("object expected")
+	}
+	return nil, nil
+}
+
+// sliceArray: select node(s) by bound(s)
+func sliceArray(input []byte, tok *tToken) ([]byte, error) {
+	return nil, nil
+}
+
+// sliceValue: slice a single value
+func sliceValue(input []byte) ([]byte, error) {
+	return nil, nil
+}
+
+// getValues: get (sub-)values from array
+func getValues(input []byte, tok *tToken) ([]byte, error) {
 	return nil, nil
 }
 
