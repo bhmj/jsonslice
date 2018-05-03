@@ -1,4 +1,4 @@
-# JSON Slicer
+# JSON Slice
 
 ## Changelog
 
