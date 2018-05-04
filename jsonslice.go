@@ -4,43 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 )
-
-/*
-// operators
-  $        -- root node (can be either object or array)
-  @        -- the current node (in a filter)
-  .node    -- dot-notated child
-  [123]    -- array index
-  [12:34]  -- array bound
-  [?(<expression>)] -- filter expression. Applicable to arrays only.
-// functions
-  $.obj.length() -- array lengh or string length, depending on the obj type
-  $.obj.size() -- object size in bytes (as is)
-// definite
-  $.obj
-  $.obj.val
-  // arrays: indexed
-  $.obj[3]
-  $.obj[3].val
-  $.obj[-2]  -- second from the end
-  // arrays: bounded
-  $.obj[:]   -- == $.obj (all elements of the array)
-  $.obj[0:]  -- the same as above: items from index 0 (inclusive) till the end
-  $.obj[<anything>:0] -- doesn't make sence (from some element to the index 0 exclusive -- which is always empty)
-  $.obj[2:]  -- items from index 2 (inclusive) till the end
-  $.obj[:5]  -- items from the beginning to the index 5 (exclusive)
-  $.obj[-2:] -- items from the second element from the end (inclusive) till the end
-  $.obj[:-2] -- items from the beginning to the second element from the end (exclusive)
-  $.obj[3:5] -- items from index 2 (inclusive) to the index 5 (exclusive)
-// indefininte
-  $.obj[any:any].something -- composite sub-query
-  $.obj[3,5,7] -- multiple array indexes
-  $.obj[?(@.price > 1000)] -- filter expression
-// more examples
-  $.obj[?(@.price > $.average)]
-  $[0].compo[]
-*/
 
 const (
 	// array node
@@ -93,7 +58,8 @@ func parsePath(path []byte) (*tToken, error) {
 	if path[i] == '[' {
 		tok.Type = cArrayType
 		i++
-		ind, i := readNumber(path, i)
+		ind := 0
+		ind, i = readNumber(path, i)
 		if i == l || (path[i] != ':' && path[i] != ']') {
 			return nil, errors.New("jsonpath: index bound missing")
 		}
@@ -233,57 +199,49 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 	var err error
 	l := len(input)
 	i := 1 // skip '['
-	if tok.Left < 0 || tok.Right < 0 {
-		// backward index(es)
-		//   scan for elemets
-		//   select by index(es)
-	} else {
-		// straight index(es)
-		//   scan for first
-		//   scan for second if any
-	}
-	if tok.Type&cArrBounded == 0 {
-		// single element
-		if tok.Left >= 0 {
-			pos := 0
-			// Nth from the beginning
-			for ch := input[i]; i < l && ch != ']'; ch = input[i] {
-				i, err = skipValue(input, i)
-				if err != nil {
-					return nil, err
-				}
-				if pos == tok.Left {
-					return input[1:i], nil // skip '['
-				}
-				pos++
-				i++
-			}
-			if i == l {
-				return nil, errors.New("array index out of bounds")
-			}
-		}
-	} else {
-		// range of elements
-	}
-	pos := 0
+	// backward index(es)
+	elems := append([]int{}, i)
+	// scan for elements
 	for ch := input[i]; i < l && ch != ']'; ch = input[i] {
 		i, err = skipValue(input, i)
 		if err != nil {
 			return nil, err
 		}
-		if pos == tok.Left {
-			return input[1:i], nil
-		}
-		if pos == tok.Left {
-			return input[1:i], nil
-		}
-		pos++
-		i++
+		elems = append(elems, i)
 	}
-	if i == l {
-		return nil, errors.New("array index out of bounds")
+	//   select by index(es)
+	if tok.Right == 0 {
+		a := 0
+		b := 0
+		if tok.Left < 0 {
+			a = len(elems) + tok.Left
+			b = len(elems) + tok.Left + 1
+		} else {
+			a = tok.Left
+			b = tok.Left + 1
+		}
+		if a < 0 || a >= len(elems) || b < 0 || b >= len(elems) {
+			return nil, errors.New(tok.Key + "[" + strconv.Itoa(tok.Left) + "] does not exist")
+		}
+		return input[elems[a]:elems[b]], nil
 	}
-	return nil, nil
+	// two bounds
+	a := 0
+	b := 0
+	if tok.Left < 0 {
+		a = len(elems) + tok.Left
+	} else {
+		a = tok.Left
+	}
+	if tok.Right < 0 {
+		a = len(elems) + tok.Right
+	} else {
+		a = tok.Right
+	}
+	if a < 0 || a >= len(elems) || b < 0 || b >= len(elems) {
+		return nil, errors.New(tok.Key + "[" + strconv.Itoa(tok.Left) + ":" + strconv.Itoa(tok.Right) + "] does not exist")
+	}
+	return input[a:b], nil
 }
 
 // sliceValue: slice a single value
@@ -327,7 +285,7 @@ func skipValue(input []byte, i int) (int, error) {
 		return 0, errors.New("unexpected end of input")
 	}
 	// spaces
-	for ch := input[i]; i < l && (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'); ch = input[i] {
+	for ch := input[i]; i < l && (ch == ',' || ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'); ch = input[i] {
 		i++
 	}
 	if i == l {
@@ -484,7 +442,8 @@ func readNumber(path []byte, i int) (int, int) {
 */
 
 func main() {
-	data := []byte(`{"store":{"book":[{"category":"reference","author":"Nigel Rees","title":"Sayings of the Century","price":8.95},{"category":"fiction","author":"Evelyn Waugh","title":"Sword of Honour","price":12.99},{"category":"fiction","author":"Herman Melville","title":"Moby Dick","isbn":"0-553-21311-3","price":8.99},{"category":"fiction","author": "J. R. R. Tolkien","title": "The Lord of the Rings","isbn": "0-395-19395-8","price": 22.99}],"bicycle": {"color": "red","price": 19.95}},"expensive": 10}`)
+	//	data := []byte(`{"store":{"book":[{"category":"reference","author":"Nigel Rees","title":"Sayings of the Century","price":8.95},{"category":"fiction","author":"Evelyn Waugh","title":"Sword of Honour","price":12.99},{"category":"fiction","author":"Herman Melville","title":"Moby Dick","isbn":"0-553-21311-3","price":8.99},{"category":"fiction","author": "J. R. R. Tolkien","title": "The Lord of the Rings","isbn": "0-395-19395-8","price": 22.99}],"bicycle": {"color": "red","price": 19.95}},"expensive": 10}`)
+	data := []byte(`{"store":{"book":[{"category":"reference","author":"Nigel Rees","title":"Sayings of the Century","price":8.95},{"category":"fiction","author":"Evelyn Waugh","title":"Sword of Honour","price":12.99}],"bicycle": {"color": "red","price": 19.95}},"expensive": 10}`)
 
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: jsonslice <jsonpath>\n  ex: $.store.book[0].author")
