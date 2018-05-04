@@ -233,6 +233,15 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 	var err error
 	l := len(input)
 	i := 1 // skip '['
+	if tok.Left < 0 || tok.Right < 0 {
+		// backward index(es)
+		//   scan for elemets
+		//   select by index(es)
+	} else {
+		// straight index(es)
+		//   scan for first
+		//   scan for second if any
+	}
 	if tok.Type&cArrBounded == 0 {
 		// single element
 		if tok.Left >= 0 {
@@ -252,16 +261,11 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 			if i == l {
 				return nil, errors.New("array index out of bounds")
 			}
-		} else {
-			// Nth from the end
-			elems
 		}
 	} else {
 		// range of elements
 	}
 	pos := 0
-	beg := 0
-	end := 0
 	for ch := input[i]; i < l && ch != ']'; ch = input[i] {
 		i, err = skipValue(input, i)
 		if err != nil {
