@@ -26,6 +26,8 @@ import (
   $.obj[-2]  -- second from the end
   // arrays: bounded
   $.obj[:]   -- == $.obj (all elements of the array)
+  $.obj[0:]  -- the same as above: items from index 0 (inclusive) till the end
+  $.obj[<anything>:0] -- doesn't make sence (from some element to the index 0 exclusive -- which is always empty)
   $.obj[2:]  -- items from index 2 (inclusive) till the end
   $.obj[:5]  -- items from the beginning to the index 5 (exclusive)
   $.obj[-2:] -- items from the second element from the end (inclusive) till the end
@@ -75,10 +77,9 @@ func Get(input []byte, path string) ([]byte, error) {
 func parsePath(path []byte) (*tToken, error) {
 	tok := &tToken{}
 	i := 0
-	ind := 0
 	l := len(path)
 	if l == 0 {
-		return nil, errors.New("element expected")
+		return nil, errors.New("jsonpath: empty item")
 	}
 	// key
 	for ; i < l && path[i] != '.' && path[i] != '['; i++ {
@@ -92,25 +93,23 @@ func parsePath(path []byte) (*tToken, error) {
 	if path[i] == '[' {
 		tok.Type = cArrayType
 		i++
-		ind, i = readNumber(path, i)
-		if i == l {
-			return nil, errors.New("']' expected (1)")
-		}
-		if path[i] != ':' && path[i] != ']' {
-			return nil, errors.New("invalid array bound (1)")
+		ind, i := readNumber(path, i)
+		if i == l || (path[i] != ':' && path[i] != ']') {
+			return nil, errors.New("jsonpath: index bound missing")
 		}
 		tok.Left = ind
 		//
 		if path[i] == ':' {
 			tok.Type |= cArrBounded
 			i++
-			ind, i = readNumber(path, i)
-			if i == l {
-				return nil, errors.New("']' expected (2)")
+			ind, ii := readNumber(path, i)
+			if (ind == 0 || ind == 1) && ii > i {
+				return nil, errors.New("jsonpath: 0 or 1 as a second bound does not make sense")
 			}
-			if path[i] != ']' {
-				return nil, errors.New("invalid array bound (2)")
+			if ii == l || path[ii] != ']' {
+				return nil, errors.New("jsonpath: index bound missing")
 			}
+			i = ii
 			tok.Right = ind
 		}
 		i++
@@ -231,17 +230,50 @@ func getKeyValue(input []byte, key string) ([]byte, error) {
 
 // sliceArray select node(s) by bound(s)
 func sliceArray(input []byte, tok *tToken) ([]byte, error) {
+	var err error
 	l := len(input)
 	i := 1 // skip '['
+	if tok.Type&cArrBounded == 0 {
+		// single element
+		if tok.Left >= 0 {
+			pos := 0
+			// Nth from the beginning
+			for ch := input[i]; i < l && ch != ']'; ch = input[i] {
+				i, err = skipValue(input, i)
+				if err != nil {
+					return nil, err
+				}
+				if pos == tok.Left {
+					return input[1:i], nil // skip '['
+				}
+				pos++
+				i++
+			}
+			if i == l {
+				return nil, errors.New("array index out of bounds")
+			}
+		} else {
+			// Nth from the end
+			elems
+		}
+	} else {
+		// range of elements
+	}
 	pos := 0
+	beg := 0
+	end := 0
 	for ch := input[i]; i < l && ch != ']'; ch = input[i] {
-		eoe, err := skipValue(input, i)
+		i, err = skipValue(input, i)
 		if err != nil {
 			return nil, err
 		}
 		if pos == tok.Left {
-			return input[1:eoe], nil
+			return input[1:i], nil
 		}
+		if pos == tok.Left {
+			return input[1:i], nil
+		}
+		pos++
 		i++
 	}
 	if i == l {
@@ -389,6 +421,7 @@ func nextKey(input []byte, i int) ([]byte, int) {
 	return nil, i
 }
 
+// readNumber returns the array index specified in array bound clause
 func readNumber(path []byte, i int) (int, int) {
 	sign := 1
 	l := len(path)
@@ -405,7 +438,16 @@ func readNumber(path []byte, i int) (int, int) {
 }
 
 /*
-,
+	data := []byte(`
+		{
+			"store": {
+				"book": [
+					{
+						"category": "reference",
+						"author": "Nigel Rees",
+						"title": "Sayings of the Century",
+						"price": 8.95
+					},
 					{
 						"category": "fiction",
 						"author": "Evelyn Waugh",
@@ -425,18 +467,6 @@ func readNumber(path []byte, i int) (int, int) {
 						"title": "The Lord of the Rings",
 						"isbn": "0-395-19395-8",
 						"price": 22.99
-					}*/
-
-func main() {
-	data := []byte(`
-		{
-			"store": {
-				"book": [
-					{
-						"category": "reference",
-						"author": "Nigel Rees",
-						"title": "Sayings of the Century",
-						"price": 8.95
 					}
 				],
 				"bicycle": {
@@ -446,7 +476,11 @@ func main() {
 			},
 			"expensive": 10
 		}
-	`)
+	`
+*/
+
+func main() {
+	data := []byte(`{"store":{"book":[{"category":"reference","author":"Nigel Rees","title":"Sayings of the Century","price":8.95},{"category":"fiction","author":"Evelyn Waugh","title":"Sword of Honour","price":12.99},{"category":"fiction","author":"Herman Melville","title":"Moby Dick","isbn":"0-553-21311-3","price":8.99},{"category":"fiction","author": "J. R. R. Tolkien","title": "The Lord of the Rings","isbn": "0-395-19395-8","price": 22.99}],"bicycle": {"color": "red","price": 19.95}},"expensive": 10}`)
 
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: jsonslice <jsonpath>\n  ex: $.store.book[0].author")
