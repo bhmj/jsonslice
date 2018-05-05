@@ -63,7 +63,7 @@ func compareSlices(s1 []byte, s2 []byte) int {
 	return 0
 }
 
-func NoTestGet(t *testing.T) {
+func TestGet(t *testing.T) {
 	res, err := Get(data, "$.expensive")
 	if compareSlices(res, []byte("10")) != 0 && err == nil {
 		t.Errorf("expensive should be 10, but got \"" + string(res) + "\"")
@@ -87,15 +87,17 @@ func BenchmarkGet(b *testing.B) {
 }
 
 func BenchmarkUnmarshal(b *testing.B) {
+	var jdata interface{}
 	for i := 0; i < b.N; i++ {
-		var jdata interface{}
 		json.Unmarshal(data, &jdata)
 	}
 }
 
 func BenchmarkJsonpath(b *testing.B) {
+	b.StopTimer()
 	var jdata interface{}
 	json.Unmarshal(data, &jdata)
+	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = jsonpath.JsonPathLookup(jdata, "$.store.book[3].title")
 	}
