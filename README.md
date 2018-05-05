@@ -37,10 +37,10 @@ $ go test -bench=. -benchmem -benchtime=2s
 goos: windows
 goarch: amd64
 pkg: github.com/bhmj/jsonslice
-BenchmarkPath-4          5000000       490 ns/op      208 B/op       8 allocs/op    <-- jsonpath parser
-BenchmarkGet-4           1000000      4250 ns/op      368 B/op      16 allocs/op    <-- Get() function
-BenchmarkUnmarshal-4      200000     23696 ns/op     3584 B/op      89 allocs/op    <-- standard unmarshall on the same data
-BenchmarkJsonpath-4      1000000      4101 ns/op      608 B/op      48 allocs/op    <-- oliveagle/jsonpath
+BenchmarkPath-4         5000000      490 ns/op     208 B/op     8 allocs/op   <-- jsonpath parser
+BenchmarkGet-4          1000000     4250 ns/op     368 B/op    16 allocs/op   <-- Get() function
+BenchmarkUnmarshal-4     200000    23696 ns/op    3584 B/op    89 allocs/op   <-- standard unmarshall on the same data
+BenchmarkJsonpath-4     1000000     4101 ns/op     608 B/op    48 allocs/op   <-- oliveagle/jsonpath
 PASS
 ok      github.com/bhmj/jsonslice       16.404s
 ```
