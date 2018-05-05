@@ -98,7 +98,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
     [12:34]             -- array bound
     [?(<expression>)]   -- (TODO) filter expression. Applicable to arrays only.
 ```
-### Functions (TODO)
+### Functions
 ```
   $.obj.length() -- array lengh or string length, depending on the obj type
   $.obj.size() -- object size in bytes (as is)
