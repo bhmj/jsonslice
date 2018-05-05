@@ -4,13 +4,31 @@
 
 **0.3.0** (2018-05-05) -- beta
 
-## Getting started
+## What is it?
 
 JsonSlice is a Go package which allows to execute fast jsonpath queries without unmarshalling the whole data.  
 
 Sometimes you need to get a single value from incoming json using jsonpath, for example to route data accordingly or so. To do that you must unmarshall the whole data into interface{} struct and then apply some jsonpath library to it, only to get just a tiny little value. What a waste of resourses! Well, now there's `jsonslice`.
 
 Simply call `jsonslice.Get` on your raw json data to slice out just the part you need. The `[]byte` received can then be unmarshalled into a struct or used as it is.
+
+## Getting started
+
+#### 1. install
+
+`go get github.com/bhmj/jsonslice`
+
+#### 2. use it
+
+```
+import "github.com/bhmj/jsonslice
+
+func main() {
+  var data = []byte(`{ "some": { "value": "hi!" } }`)
+
+  v, err := jsonslice.Get(data, "$.some.value")
+}
+```
 
 ## Benchmarks
 
