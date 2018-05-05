@@ -16,7 +16,9 @@ Simply call `jsonslice.Get` on your raw json data to slice out just the part you
 
 #### 1. install
 
-`go get github.com/bhmj/jsonslice`
+```
+$ go get github.com/bhmj/jsonslice
+```
 
 #### 2. use it
 
