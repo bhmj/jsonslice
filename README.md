@@ -25,7 +25,7 @@ ok      github.com/bhmj/jsonslice/examples      10.348s
 
 ## Specs
 
-See [jsonpath.com](jsonpath.com) for specs and examples
+See [jsonpath.com](http://jsonpath.com) for specs and examples
 
 ## Limitations and deviations
 
