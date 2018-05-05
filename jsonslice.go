@@ -67,8 +67,8 @@ func parsePath(path []byte) (*tToken, error) {
 			tok.Type |= cArrBounded
 			i++
 			ind, ii := readNumber(path, i)
-			if (ind == 0 || ind == 1) && ii > i {
-				return nil, errors.New("jsonpath: 0 or 1 as a second bound does not make sense")
+			if ind == 0 && ii > i {
+				return nil, errors.New("jsonpath: 0 as a second bound does not make sense")
 			}
 			if ii == l || path[ii] != ']' {
 				return nil, errors.New("jsonpath: index bound missing")

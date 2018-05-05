@@ -75,7 +75,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
   $.obj[3].val
   $.obj[-2]  -- second from the end
 ```
-### Indefininte
+### Indefinite
 ```
   // arrays: bounded
   $.obj[:]   -- == $.obj (all elements of the array)
