@@ -17,6 +17,10 @@ import (
 // Get the jsonpath subset of the input
 func Get(input []byte, path string) ([]byte, error) {
 
+	if path[0] != '$' {
+		return nil, errors.New("path: $ expected")
+	}
+
 	tokens, err := parsePath([]byte(path))
 	if err != nil {
 		return nil, err
@@ -48,9 +52,6 @@ func parsePath(path []byte) (*tToken, error) {
 	l := len(path)
 	if l == 0 {
 		return nil, errors.New("path: empty")
-	}
-	if path[0] != '$' {
-		return nil, errors.New("path: $ expected")
 	}
 	// key
 	for ; i < l && path[i] != '.' && path[i] != '['; i++ {
