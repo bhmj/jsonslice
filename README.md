@@ -66,7 +66,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
   $.obj.length() -- array lengh or string length, depending on the obj type
   $.obj.size() -- object size in bytes (as is)
 ```
-## Definite
+### Definite
 ```
   $.obj
   $.obj.val
