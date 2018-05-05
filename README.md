@@ -117,7 +117,8 @@ Currently only dot notation (`$.foo.bar`) is supported.
   $.obj[2:]  -- items from index 2 (inclusive) till the end
   $.obj[:5]  -- items from the beginning to the index 5 (exclusive)
   $.obj[-2:] -- items from the second element from the end (inclusive) till the end
-  $.obj[:-2] -- items from the beginning to the second element from the end (exclusive)
+  $.obj[:-2] -- items from the beginning to the second element from the end (exclusive, i.e. without two last elements)
+  $.obj[:-1] -- items from the beginning to the end but without one final element
   $.obj[3:5] -- items from index 2 (inclusive) to the index 5 (exclusive)
 ```
 ### sub-querying (TODO)

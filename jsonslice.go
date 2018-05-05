@@ -21,8 +21,6 @@ const (
 	cArrBounded = 1 << iota // bounded [x:y] or indexed [x]
 	// terminal node
 	cIsTerminal = 1 << iota
-	//
-	cNoBound = 2147483647
 )
 
 type tToken struct {
@@ -80,9 +78,6 @@ func parsePath(path []byte) (*tToken, error) {
 			ind, ii := readNumber(path, i)
 			if ind == 0 && ii > i {
 				return nil, errors.New("jsonpath: 0 as a second bound does not make sense")
-			}
-			if i == ii {
-				ind = cNoBound
 			}
 			if ii == l || path[ii] != ']' {
 				return nil, errors.New("jsonpath: index bound missing")
@@ -217,6 +212,9 @@ type tElem struct {
 // sliceArray select node(s) by bound(s)
 func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 	l := len(input)
+	if input[0] != '[' {
+		return nil, errors.New("array not found at " + tok.Key)
+	}
 	i := 1 // skip '['
 	elems := make([]tElem, 0)
 	// scan for elements
@@ -233,7 +231,7 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 		}
 	}
 	//   select by index(es)
-	if tok.Right == 0 {
+	if tok.Type&cArrBounded == 0 {
 		a := tok.Left
 		if a < 0 {
 			a += len(elems)
@@ -246,7 +244,7 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 	// two bounds
 	a := tok.Left
 	b := tok.Right
-	if b == cNoBound {
+	if b == 0 {
 		b = len(elems)
 	}
 	if a < 0 {
