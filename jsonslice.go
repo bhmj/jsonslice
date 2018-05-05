@@ -36,6 +36,10 @@ const (
 	cArrBounded = 1 << iota // bounded [x:y] or indexed [x]
 	// terminal node
 	cIsTerminal = 1 << iota
+	// function
+	cFunction = 1 << iota
+	// function subject
+	cSubject = 1 << iota
 )
 
 type tToken struct {
@@ -54,13 +58,28 @@ func parsePath(path []byte) (*tToken, error) {
 		return nil, errors.New("path: empty")
 	}
 	// key
-	for ; i < l && path[i] != '.' && path[i] != '['; i++ {
+	for ; i < l && path[i] != '.' && path[i] != '[' && path[i] != '('; i++ {
 	}
 	tok.Key = string(path[:i])
 	// type
 	if i == l {
 		tok.Type |= cIsTerminal
 		return tok, nil
+	}
+	// function
+	if path[i] == '(' && i < l && path[i+1] == ')' {
+		switch tok.Key {
+		case "length":
+		case "size":
+		default:
+			return nil, errors.New("path: unknown function " + tok.Key + "()")
+		}
+		tok.Type |= cFunction
+		i += 2
+		if i == l {
+			tok.Type |= cIsTerminal
+			return tok, nil
+		}
 	}
 	if path[i] == '[' {
 		tok.Type = cArrayType
@@ -103,6 +122,9 @@ func parsePath(path []byte) (*tToken, error) {
 		return nil, err
 	}
 	tok.Next = next
+	if next.Type&cFunction > 0 {
+		tok.Type |= cSubject
+	}
 
 	return tok, nil
 }
@@ -134,6 +156,10 @@ func getValue(input []byte, tok *tToken) (result []byte, err error) {
 	}
 
 	// here we are at the beginning of a value
+
+	if tok.Type&cSubject > 0 {
+		return doFunc(input, tok.Next)
+	}
 
 	if tok.Type&cIsTerminal > 0 {
 		if tok.Type&cArrayType > 0 {
@@ -299,19 +325,7 @@ func skipValue(input []byte, i int) (int, error) {
 	l := len(input)
 	if input[i] == '"' {
 		// string
-		prev := byte('"')
-		done := false
-		i++
-		for ch := input[i]; i < l && !done; ch = input[i] {
-			if ch == '"' && prev != '\\' {
-				done = true
-			}
-			prev = ch
-			i++
-		}
-		if i == l {
-			return 0, errors.New("unexpected end of input")
-		}
+		return skipString(input, i)
 	} else if input[i] == '{' || input[i] == '[' {
 		// object or array
 		mark := input[i]
@@ -352,6 +366,9 @@ func checkValueType(input []byte, tok *tToken) error {
 	if len(input) < 2 {
 		return errors.New("unexpected end of input")
 	}
+	if tok.Type&cSubject > 0 {
+		return nil
+	}
 	ch := input[0]
 	if ch == '[' && tok.Type&cArrayType == 0 && tok.Type&cIsTerminal == 0 {
 		return errors.New("object expected at " + tok.Key)
@@ -389,6 +406,41 @@ func nextKey(input []byte, i int) ([]byte, int) {
 	return nil, i
 }
 
+func doFunc(input []byte, tok *tToken) ([]byte, error) {
+	var err error
+	var result int
+	switch tok.Key {
+	case "size":
+		result, err = skipValue(input, 0)
+	case "length":
+		if input[0] == '"' {
+			result, err = skipString(input, 0)
+		} else if input[0] == '[' {
+			i := 1
+			l := len(input)
+			// count elements
+			for ch := input[i]; i < l && ch != ']'; ch = input[i] {
+				e, err := skipValue(input, i)
+				if err != nil {
+					return nil, err
+				}
+				result++
+				// skip spaces after value
+				i, err = skipSpaces(input, e)
+				if err != nil {
+					return nil, err
+				}
+			}
+		} else {
+			return nil, errors.New("length() is only applicable to array or string")
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return []byte(strconv.Itoa(result)), nil
+}
+
 // readNumber returns the array index specified in array bound clause
 func readNumber(path []byte, i int) (int, int) {
 	sign := 1
@@ -408,6 +460,24 @@ func readNumber(path []byte, i int) (int, int) {
 func skipSpaces(input []byte, i int) (int, error) {
 	l := len(input)
 	for ch := input[i]; i < l && (ch == ',' || ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'); ch = input[i] {
+		i++
+	}
+	if i == l {
+		return 0, errors.New("unexpected end of input")
+	}
+	return i, nil
+}
+
+func skipString(input []byte, i int) (int, error) {
+	prev := byte('"')
+	done := false
+	i++
+	l := len(input)
+	for ch := input[i]; i < l && !done; ch = input[i] {
+		if ch == '"' && prev != '\\' {
+			done = true
+		}
+		prev = ch
 		i++
 	}
 	if i == l {

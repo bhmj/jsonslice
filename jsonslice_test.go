@@ -1,10 +1,9 @@
-package main
+package jsonslice
 
 import (
 	"encoding/json"
 	"testing"
 
-	"github.com/bhmj/jsonslice"
 	"github.com/oliveagle/jsonpath"
 )
 
@@ -64,27 +63,40 @@ func compareSlices(s1 []byte, s2 []byte) int {
 	return 0
 }
 
-func TestGet(t *testing.T) {
-	res, err := jsonslice.Get(data, "$.expensive")
+func NoTestGet(t *testing.T) {
+	res, err := Get(data, "$.expensive")
 	if compareSlices(res, []byte("10")) != 0 && err == nil {
 		t.Errorf("expensive should be 10, but got \"" + string(res) + "\"")
 	}
-	res, err = jsonslice.Get(data, "$.store.book[3].author")
+	res, err = Get(data, "$.store.book[3].author")
 	if compareSlices(res, []byte(`"J. R. R. Tolkien"`)) != 0 && err == nil {
 		t.Errorf("store.book[3].author should be \"J. R. R. Tolkien\", but got \"" + string(res) + "\"")
 	}
 }
 
+func BenchmarkPath(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, _ = parsePath([]byte("$.store.book[3].title"))
+	}
+}
+
 func BenchmarkGet(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		_, _ = jsonslice.Get(data, "$.store.book[3].title")
+		_, _ = Get(data, "$.store.book[3].title")
+	}
+}
+
+func BenchmarkUnmarshal(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		var jdata interface{}
+		json.Unmarshal(data, &jdata)
 	}
 }
 
 func BenchmarkJsonpath(b *testing.B) {
+	var jdata interface{}
+	json.Unmarshal(data, &jdata)
 	for i := 0; i < b.N; i++ {
-		var jdata interface{}
-		json.Unmarshal(data, &jdata)
 		_, _ = jsonpath.JsonPathLookup(jdata, "$.store.book[3].title")
 	}
 }

@@ -33,14 +33,16 @@ func main() {
 ## Benchmarks
 
 ```
-$ cd examples/ && go test -bench=. -benchmem -benchtime=3s && cd ..
+$ go test -bench=. -benchmem -benchtime=2s
 goos: windows
 goarch: amd64
-pkg: github.com/bhmj/jsonslice/examples
-BenchmarkGet-4           1000000              4294 ns/op             368 B/op         16 allocs/op
-BenchmarkJsonpath-4       200000             28371 ns/op            4192 B/op        137 allocs/op
+pkg: github.com/bhmj/jsonslice
+BenchmarkPath-4          5000000       490 ns/op      208 B/op       8 allocs/op    <-- jsonpath parser
+BenchmarkGet-4           1000000      4250 ns/op      368 B/op      16 allocs/op    <-- Get() function
+BenchmarkUnmarshal-4      200000     23696 ns/op     3584 B/op      89 allocs/op    <-- standard unmarshall on the same data
+BenchmarkJsonpath-4      1000000      4101 ns/op      608 B/op      48 allocs/op    <-- oliveagle/jsonpath
 PASS
-ok      github.com/bhmj/jsonslice/examples      10.348s
+ok      github.com/bhmj/jsonslice       16.404s
 ```
 
 ## Specs
