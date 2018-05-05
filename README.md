@@ -119,7 +119,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
 
 ## Examples
 
-  Considering `sample0.json` and `sample1.json` in the example directory:  
+  Assuming `sample0.json` and `sample1.json` in the example directory:  
 
   `./main sample0.json '$.store.book[0]'`  
   `./main sample0.json '$.store.book[0].title'`  
