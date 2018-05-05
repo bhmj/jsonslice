@@ -1,0 +1,10 @@
+{
+  "store": {
+    "book": [],
+    "bicycle": {
+      "color": [[ "red" ]],
+      "price": 19.95
+    }
+  },
+  "expensive": 10
+}

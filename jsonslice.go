@@ -34,10 +34,6 @@ type tToken struct {
 // Get the jsonpath subset of the input
 func Get(input []byte, path string) ([]byte, error) {
 
-	if path[0] != '$' {
-		return nil, errors.New("path: $ expected")
-	}
-
 	tokens, err := parsePath([]byte(path))
 	if err != nil {
 		return nil, err
@@ -51,7 +47,10 @@ func parsePath(path []byte) (*tToken, error) {
 	i := 0
 	l := len(path)
 	if l == 0 {
-		return nil, errors.New("jsonpath: empty item")
+		return nil, errors.New("path: empty")
+	}
+	if path[0] != '$' {
+		return nil, errors.New("path: $ expected")
 	}
 	// key
 	for ; i < l && path[i] != '.' && path[i] != '['; i++ {
@@ -68,7 +67,7 @@ func parsePath(path []byte) (*tToken, error) {
 		ind := 0
 		ind, i = readNumber(path, i)
 		if i == l || (path[i] != ':' && path[i] != ']') {
-			return nil, errors.New("jsonpath: index bound missing")
+			return nil, errors.New("path: index bound missing")
 		}
 		tok.Left = ind
 		//
@@ -77,10 +76,10 @@ func parsePath(path []byte) (*tToken, error) {
 			i++
 			ind, ii := readNumber(path, i)
 			if ind == 0 && ii > i {
-				return nil, errors.New("jsonpath: 0 as a second bound does not make sense")
+				return nil, errors.New("path: 0 as a second bound does not make sense")
 			}
 			if ii == l || path[ii] != ']' {
-				return nil, errors.New("jsonpath: index bound missing")
+				return nil, errors.New("path: index bound missing")
 			}
 			i = ii
 			tok.Right = ind
@@ -92,10 +91,10 @@ func parsePath(path []byte) (*tToken, error) {
 		}
 	}
 	if tok.Type&cArrBounded > 0 && tok.Type&cIsTerminal == 0 {
-		return nil, errors.New("indefinite references are not yet supported")
+		return nil, errors.New("path: indefinite references are not yet supported")
 	}
 	if path[i] != '.' {
-		return nil, errors.New("invalid element reference")
+		return nil, errors.New("path: invalid element reference ('.' expected)")
 	}
 	i++
 	next, err := parsePath(path[i:])
@@ -116,7 +115,7 @@ func getValue(input []byte, tok *tToken) (result []byte, err error) {
 
 	input = input[i:]
 	if len(input) == 0 {
-		return nil, errors.New("unexpected end of file")
+		return nil, errors.New("unexpected end of input")
 	}
 	if input[0] != '{' && input[0] != '[' {
 		return nil, errors.New("object or array expected")
@@ -411,7 +410,7 @@ func skipSpaces(input []byte, i int) (int, error) {
 		i++
 	}
 	if i == l {
-		return 0, errors.New("unexpected end of file")
+		return 0, errors.New("unexpected end of input")
 	}
 	return i, nil
 }
