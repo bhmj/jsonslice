@@ -80,7 +80,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
   // arrays: bounded
   $.obj[:]   -- == $.obj (all elements of the array)
   $.obj[0:]  -- the same as above: items from index 0 (inclusive) till the end
-  $.obj[<anything>:0] -- doesn't make sence (from some element to the index 0 exclusive -- which is always empty)
+  $.obj[<anything>:0] -- doesn't make sense (from some element to the index 0 exclusive -- which is always empty)
   $.obj[2:]  -- items from index 2 (inclusive) till the end
   $.obj[:5]  -- items from the beginning to the index 5 (exclusive)
   $.obj[-2:] -- items from the second element from the end (inclusive) till the end
