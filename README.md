@@ -2,13 +2,15 @@
 
 ## Changelog
 
-2018-05-05 - array slice works, bugfixes  
-2018-05-04 - definite paths supported (array slice, object or single value)  
-2018-05-01 - first commit
+**0.3.0** (2018-05-05) -- beta
 
 ## Getting started
 
-JsonSlice is a Go package which allows to execute fast jsonpath queries without unmarshalling the whole data.
+JsonSlice is a Go package which allows to execute fast jsonpath queries without unmarshalling the whole data.  
+
+Sometimes you need to get a single value from incoming json using jsonpath, for example to route data accordingly or so. To do that you must unmarshall the whole data into interface{} struct and then apply some jsonpath library to it, only to get just a tiny little value. What a waste of resourses! Well, now there's `jsonslice`.
+
+Simply call `jsonslice.Get` on your raw json data to slice out just the part you need. The `[]byte` received can then be unmarshalled into a struct or used as it is.
 
 ## Benchmarks
 
@@ -41,6 +43,19 @@ returns
   "title": "Sayings of the Century",
   "price": 8.95
 }
+```
+while this query
+```
+main sample0.json $.store.books[0:1]
+```
+returns an array 
+```
+[{
+  "category": "reference",
+  "author": "Nigel Rees",
+  "title": "Sayings of the Century",
+  "price": 8.95
+}]
 ```
 
 Also, indexing on root node is supported (assuming json is an array and not an object):  
@@ -95,6 +110,11 @@ Currently only dot notation (`$.foo.bar`) is supported.
 ### Filters (TODO)
 ```
   $.obj[?(@.price > 1000)] -- filter expression
+```
+### Updates (TODO)
+```
+  $.obj[?(@.price > 1000)].expensive = true  -- add/replace field value
+  $.obj[?(@.authors.size() > 2)].title += " (group of authors)"  -- expand field value
 ```
 
 ## Examples

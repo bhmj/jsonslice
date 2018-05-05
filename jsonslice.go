@@ -1,5 +1,14 @@
 package jsonslice
 
+/**
+  JsonSlice 0.3.0
+  Michael Gurov, 2018
+  MIT licenced
+
+  Slice a part of a raw json ([]byte) using jsonpath, without unmarshalling the whole thing.
+  The result is also []byte.
+**/
+
 import (
 	"errors"
 	"strconv"
