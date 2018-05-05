@@ -14,6 +14,17 @@ import (
 	"strconv"
 )
 
+// Get the jsonpath subset of the input
+func Get(input []byte, path string) ([]byte, error) {
+
+	tokens, err := parsePath([]byte(path))
+	if err != nil {
+		return nil, err
+	}
+
+	return getValue(input, tokens)
+}
+
 const (
 	// array node
 	cArrayType = 1 << iota
@@ -29,17 +40,6 @@ type tToken struct {
 	Left  int  // >=0 index from the start, <0 backward index from the end
 	Right int  // 0 till the end inclusive, >0 to index exclusive, <0 backward index from the end exclusive
 	Next  *tToken
-}
-
-// Get the jsonpath subset of the input
-func Get(input []byte, path string) ([]byte, error) {
-
-	tokens, err := parsePath([]byte(path))
-	if err != nil {
-		return nil, err
-	}
-
-	return getValue(input, tokens)
 }
 
 func parsePath(path []byte) (*tToken, error) {
