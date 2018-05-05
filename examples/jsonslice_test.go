@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/bhmj/jsonslice"
+	"github.com/oliveagle/jsonpath"
+)
 
 var data []byte
 
@@ -58,9 +64,27 @@ func compareSlices(s1 []byte, s2 []byte) int {
 	return 0
 }
 
-func Test_jsonpath_Get(t *testing.T) {
-	res, err := Get(data, "$.expensive")
-	if compareSlices(res, data) != 0 && err == nil {
-		t.Errorf("expensive should be 10")
+func TestGet(t *testing.T) {
+	res, err := jsonslice.Get(data, "$.expensive")
+	if compareSlices(res, []byte("10")) != 0 && err == nil {
+		t.Errorf("expensive should be 10, but got \"" + string(res) + "\"")
+	}
+	res, err = jsonslice.Get(data, "$.store.book[3].author")
+	if compareSlices(res, []byte(`"J. R. R. Tolkien"`)) != 0 && err == nil {
+		t.Errorf("store.book[3].author should be \"J. R. R. Tolkien\", but got \"" + string(res) + "\"")
+	}
+}
+
+func BenchmarkGet(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, _ = jsonslice.Get(data, "$.store.book[3].title")
+	}
+}
+
+func BenchmarkJsonpath(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		var jdata interface{}
+		json.Unmarshal(data, &jdata)
+		_, _ = jsonpath.JsonPathLookup(jdata, "$.store.book[3].title")
 	}
 }

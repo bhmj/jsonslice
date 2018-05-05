@@ -1,9 +1,7 @@
-package main
+package jsonslice
 
 import (
 	"errors"
-	"fmt"
-	"os"
 	"strconv"
 )
 
@@ -101,12 +99,12 @@ func parsePath(path []byte) (*tToken, error) {
 }
 
 func getValue(input []byte, tok *tToken) (result []byte, err error) {
-	// skip spaces
-	i := 0
-	l := len(input)
-	for ch := input[i]; i < l && (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'); ch = input[i] {
-		i++
+
+	i, err := skipSpaces(input, 0)
+	if err != nil {
+		return nil, err
 	}
+
 	input = input[i:]
 	if len(input) == 0 {
 		return nil, errors.New("unexpected end of file")
@@ -140,6 +138,9 @@ func getValue(input []byte, tok *tToken) (result []byte, err error) {
 	}
 	if tok.Type&cArrayType > 0 {
 		input, err = sliceArray(input, tok)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return getValue(input, tok.Next)
 }
@@ -194,54 +195,54 @@ func getKeyValue(input []byte, key string) ([]byte, error) {
 	return nil, errors.New("field " + key + " not found")
 }
 
+type tElem struct {
+	start int
+	end   int
+}
+
 // sliceArray select node(s) by bound(s)
 func sliceArray(input []byte, tok *tToken) ([]byte, error) {
-	var err error
 	l := len(input)
 	i := 1 // skip '['
-	// backward index(es)
-	elems := append([]int{}, i)
+	elems := make([]tElem, 0)
 	// scan for elements
 	for ch := input[i]; i < l && ch != ']'; ch = input[i] {
-		i, err = skipValue(input, i)
+		e, err := skipValue(input, i)
 		if err != nil {
 			return nil, err
 		}
-		elems = append(elems, i)
+		elems = append(elems, tElem{i, e})
+		// skip spaces after value
+		i, err = skipSpaces(input, e)
+		if err != nil {
+			return nil, err
+		}
 	}
 	//   select by index(es)
 	if tok.Right == 0 {
-		a := 0
-		b := 0
-		if tok.Left < 0 {
-			a = len(elems) + tok.Left
-			b = len(elems) + tok.Left + 1
-		} else {
-			a = tok.Left
-			b = tok.Left + 1
+		a := tok.Left
+		if a < 0 {
+			a += len(elems)
 		}
-		if a < 0 || a >= len(elems) || b < 0 || b >= len(elems) {
+		if a < 0 || a >= len(elems) {
 			return nil, errors.New(tok.Key + "[" + strconv.Itoa(tok.Left) + "] does not exist")
 		}
-		return input[elems[a]:elems[b]], nil
+		return input[elems[a].start:elems[a].end], nil
 	}
 	// two bounds
-	a := 0
-	b := 0
-	if tok.Left < 0 {
-		a = len(elems) + tok.Left
-	} else {
-		a = tok.Left
+	a := tok.Left
+	b := tok.Right
+	if a < 0 {
+		a += len(elems)
 	}
-	if tok.Right < 0 {
-		a = len(elems) + tok.Right
-	} else {
-		a = tok.Right
+	if b < 0 {
+		b += len(elems)
 	}
+	b-- // right bound excluded
 	if a < 0 || a >= len(elems) || b < 0 || b >= len(elems) {
 		return nil, errors.New(tok.Key + "[" + strconv.Itoa(tok.Left) + ":" + strconv.Itoa(tok.Right) + "] does not exist")
 	}
-	return input[a:b], nil
+	return append([]byte{'['}, append(input[elems[a].start:elems[b].end], ']')...), nil
 }
 
 // sliceValue: slice a single value
@@ -259,38 +260,28 @@ func getValues(input []byte, tok *tToken) ([]byte, error) {
 }
 
 func seekToValue(input []byte, i int) (int, error) {
-	l := len(input)
-	// spaces
-	for ch := input[i]; i < l && ch != ':'; ch = input[i] {
-		i++
+	var err error
+	// spaces before ':'
+	i, err = skipSpaces(input, i)
+	if err != nil {
+		return 0, err
 	}
-	// colon
-	if i == l {
-		return 0, errors.New("unexpected end of input")
+	if input[i] != ':' {
+		return 0, errors.New("\":\" expected")
 	}
-	i++
-	// spaces
-	for ch := input[i]; i < l && (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'); ch = input[i] {
-		i++
-	}
-	if i == l {
-		return 0, errors.New("unexpected end of input")
-	}
-	return i, nil
+	i++ // colon
+	return skipSpaces(input, i)
 }
 
 func skipValue(input []byte, i int) (int, error) {
-	l := len(input)
-	if i == l {
-		return 0, errors.New("unexpected end of input")
-	}
+	var err error
 	// spaces
-	for ch := input[i]; i < l && (ch == ',' || ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'); ch = input[i] {
-		i++
+	i, err = skipSpaces(input, i)
+	if err != nil {
+		return 0, err
 	}
-	if i == l {
-		return 0, errors.New("unexpected end of input")
-	}
+
+	l := len(input)
 	if input[i] == '"' {
 		// string
 		prev := byte('"')
@@ -335,7 +326,7 @@ func skipValue(input []byte, i int) (int, error) {
 		i++ // closing mark
 	} else {
 		// number, bool, null
-		for ch := input[i]; i < l && ch != ',' && ch != '}'; ch = input[i] {
+		for ch := input[i]; i < l && ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r' && ch != ',' && ch != '}'; ch = input[i] {
 			i++
 		}
 	}
@@ -399,65 +390,13 @@ func readNumber(path []byte, i int) (int, int) {
 	return ind * sign, i
 }
 
-/*
-	data := []byte(`
-		{
-			"store": {
-				"book": [
-					{
-						"category": "reference",
-						"author": "Nigel Rees",
-						"title": "Sayings of the Century",
-						"price": 8.95
-					},
-					{
-						"category": "fiction",
-						"author": "Evelyn Waugh",
-						"title": "Sword of Honour",
-						"price": 12.99
-					},
-					{
-						"category": "fiction",
-						"author": "Herman Melville",
-						"title": "Moby Dick",
-						"isbn": "0-553-21311-3",
-						"price": 8.99
-					},
-					{
-						"category": "fiction",
-						"author": "J. R. R. Tolkien",
-						"title": "The Lord of the Rings",
-						"isbn": "0-395-19395-8",
-						"price": 22.99
-					}
-				],
-				"bicycle": {
-					"color": "red",
-					"price": 19.95
-				}
-			},
-			"expensive": 10
-		}
-	`
-*/
-
-func main() {
-	//	data := []byte(`{"store":{"book":[{"category":"reference","author":"Nigel Rees","title":"Sayings of the Century","price":8.95},{"category":"fiction","author":"Evelyn Waugh","title":"Sword of Honour","price":12.99},{"category":"fiction","author":"Herman Melville","title":"Moby Dick","isbn":"0-553-21311-3","price":8.99},{"category":"fiction","author": "J. R. R. Tolkien","title": "The Lord of the Rings","isbn": "0-395-19395-8","price": 22.99}],"bicycle": {"color": "red","price": 19.95}},"expensive": 10}`)
-	data := []byte(`{"store":{"book":[{"category":"reference","author":"Nigel Rees","title":"Sayings of the Century","price":8.95},{"category":"fiction","author":"Evelyn Waugh","title":"Sword of Honour","price":12.99}],"bicycle": {"color": "red","price": 19.95}},"expensive": 10}`)
-
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: jsonslice <jsonpath>\n  ex: $.store.book[0].author")
-		return
+func skipSpaces(input []byte, i int) (int, error) {
+	l := len(input)
+	for ch := input[i]; i < l && (ch == ',' || ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'); ch = input[i] {
+		i++
 	}
-
-	arg := os.Args[1]
-
-	s, err := Get(data, arg)
-
-	if err != nil {
-		fmt.Println(err)
-		return
+	if i == l {
+		return 0, errors.New("unexpected end of file")
 	}
-
-	fmt.Println(string(s))
+	return i, nil
 }
