@@ -91,17 +91,17 @@ Currently only dot notation (`$.foo.bar`) is supported.
 
 ### Operators
 ```
-    $                   -- root node (can be either object or array)
-    @                   -- (TODO) the current node (in a filter)
-    .node               -- dot-notated child
-    [123]               -- array index
-    [12:34]             -- array bound
-    [?(<expression>)]   -- (TODO) filter expression. Applicable to arrays only.
+  $                   -- root node (can be either object or array)
+  @                   -- (TODO) the current node (in a filter)
+  .node               -- dot-notated child
+  [123]               -- array index
+  [12:34]             -- array bound
+  [?(<expression>)]   -- (TODO) filter expression. Applicable to arrays only.
 ```
 ### Functions
 ```
-  $.obj.length() -- array lengh or string length, depending on the obj type
-  $.obj.size() -- object size in bytes (as is)
+  $.obj.length()      -- array lengh or string length, depending on the obj type
+  $.obj.size()        -- object size in bytes (as is)
 ```
 ### Objects
 ```
