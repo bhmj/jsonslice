@@ -11,8 +11,16 @@ package jsonslice
 
 import (
 	"errors"
+	"reflect"
 	"strconv"
 )
+
+var intSize uintptr
+
+func init() {
+	i := int(123)
+	intSize = reflect.TypeOf(i).Size()
+}
 
 // Get the jsonpath subset of the input
 func Get(input []byte, path string) ([]byte, error) {
@@ -193,10 +201,11 @@ func getKeyValue(input []byte, key string) ([]byte, error) {
 
 	i := 1
 	l := len(input)
+	k := make([]byte, 0, 32)
 
 	for i < l && input[i] != '}' {
 		state := keySeek
-		k := make([]byte, 0)
+		k = k[:0]
 		for ch := input[i]; i < l && state != keyClose; ch = input[i] {
 			switch state {
 			case keySeek:
@@ -225,9 +234,13 @@ func getKeyValue(input []byte, key string) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
+			i, err = skipSpaces(input, i)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
-	return nil, errors.New("field " + key + " not found")
+	return nil, errors.New(`"` + key + `" field not found`)
 }
 
 type tElem struct {

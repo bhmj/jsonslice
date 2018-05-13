@@ -35,16 +35,16 @@ func main() {
 ## Benchmarks
 
 ```
-$ go test -bench=. -benchmem -benchtime=2s
+$ go test -bench=. -benchmem -benchtime=4s
 goos: windows
 goarch: amd64
 pkg: github.com/bhmj/jsonslice
-BenchmarkPath-4         5000000      490 ns/op     208 B/op     8 allocs/op   <-- jsonpath parser
-BenchmarkGet-4          1000000     4250 ns/op     368 B/op    16 allocs/op   <-- Get() function
-BenchmarkUnmarshal-4     200000    23696 ns/op    3584 B/op    89 allocs/op   <-- standard unmarshal
-BenchmarkJsonpath-4     1000000     4101 ns/op     608 B/op    48 allocs/op   <-- oliveagle/jsonpath
+BenchmarkPath-4         10000000      507 ns/op     208 B/op     8 allocs/op
+BenchmarkGet-4           1000000     4371 ns/op     320 B/op    11 allocs/op
+BenchmarkUnmarshal-4      200000    23791 ns/op    3568 B/op    88 allocs/op
+BenchmarkJsonpath-4      1000000     4165 ns/op     608 B/op    48 allocs/op
 PASS
-ok      github.com/bhmj/jsonslice       16.404s
+ok      github.com/bhmj/jsonslice       19.267s
 ```
 
 ## Specs
@@ -103,18 +103,19 @@ Currently only dot notation (`$.foo.bar`) is supported.
   $.obj.length() -- array lengh or string length, depending on the obj type
   $.obj.size() -- object size in bytes (as is)
 ```
-### Definite
+### Objects
 ```
   $.obj
   $.obj.val
-  // arrays: indexed
+```
+###  Indexed arrays
+```
   $.obj[3]
   $.obj[3].val
   $.obj[-2]  -- second from the end
 ```
-### Indefinite
+### Bounded arrays
 ```
-  // arrays: bounded
   $.obj[:]   -- == $.obj (all elements of the array)
   $.obj[0:]  -- the same as above: items from index 0 (inclusive) till the end
   $.obj[<anything>:0] -- doesn't make sense (from some element to the index 0 exclusive -- which is always empty)
@@ -125,7 +126,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
   $.obj[:-1] -- items from the beginning to the end but without one final element
   $.obj[3:5] -- items from index 2 (inclusive) to the index 5 (exclusive)
 ```
-### sub-querying (TODO)
+### Sub-querying (TODO)
 ```
   $.obj[any:any].something -- composite sub-query
   $.obj[3,5,7] -- multiple array indexes
