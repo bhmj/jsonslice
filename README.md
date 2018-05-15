@@ -39,12 +39,12 @@ $ go test -bench=. -benchmem -benchtime=4s
 goos: windows
 goarch: amd64
 pkg: github.com/bhmj/jsonslice
-BenchmarkPath-4         10000000      507 ns/op     208 B/op     8 allocs/op
-BenchmarkGet-4           1000000     4371 ns/op     320 B/op    11 allocs/op
-BenchmarkUnmarshal-4      200000    23791 ns/op    3568 B/op    88 allocs/op
-BenchmarkJsonpath-4      1000000     4165 ns/op     608 B/op    48 allocs/op
+BenchmarkPath-4        10000000      518 ns/op     336 B/op     8 allocs/op
+BenchmarkGet-4          2000000     3761 ns/op     336 B/op     8 allocs/op
+BenchmarkUnmarshal-4     300000    22457 ns/op    3568 B/op    88 allocs/op
+BenchmarkJsonpath-4     2000000     3927 ns/op     608 B/op    48 allocs/op
 PASS
-ok      github.com/bhmj/jsonslice       19.267s
+ok      github.com/bhmj/jsonslice       35.874s
 ```
 
 ## Specs
@@ -89,56 +89,65 @@ main sample1.json $[0].author
 
 Currently only dot notation (`$.foo.bar`) is supported.
 
-### Operators
+## Expressions
+
+### Deterministic expressions
+
+#### Operators 
 ```
   $                   -- root node (can be either object or array)
-  @                   -- (TODO) the current node (in a filter)
   .node               -- dot-notated child
   [123]               -- array index
-  [12:34]             -- array bound
-  [?(<expression>)]   -- (TODO) filter expression. Applicable to arrays only.
+  [12:34]             -- array range
 ```
-### Functions
+#### Functions
 ```
   $.obj.length()      -- array lengh or string length, depending on the obj type
   $.obj.size()        -- object size in bytes (as is)
 ```
-### Objects
+#### Objects
 ```
   $.obj
   $.obj.val
 ```
-###  Indexed arrays
+####  Indexed arrays
 ```
   $.obj[3]
   $.obj[3].val
   $.obj[-2]  -- second from the end
 ```
-### Bounded arrays
+#### Ranged arrays
 ```
   $.obj[:]   -- == $.obj (all elements of the array)
   $.obj[0:]  -- the same as above: items from index 0 (inclusive) till the end
   $.obj[<anything>:0] -- doesn't make sense (from some element to the index 0 exclusive -- which is always empty)
   $.obj[2:]  -- items from index 2 (inclusive) till the end
-  $.obj[:5]  -- items from the beginning to the index 5 (exclusive)
+  $.obj[:5]  -- items from the beginning to index 5 (exclusive)
   $.obj[-2:] -- items from the second element from the end (inclusive) till the end
   $.obj[:-2] -- items from the beginning to the second element from the end (exclusive, i.e. without two last elements)
   $.obj[:-1] -- items from the beginning to the end but without one final element
-  $.obj[3:5] -- items from index 2 (inclusive) to the index 5 (exclusive)
+  $.obj[3:5] -- items from index 2 (inclusive) to index 5 (exclusive)
 ```
-### Sub-querying (TODO)
+
+### Non-deterministic expressions
+
+#### Sub-querying (TODO)
 ```
-  $.obj[any:any].something -- composite sub-query
-  $.obj[3,5,7] -- multiple array indexes
+  $.obj[any:any].something  -- composite sub-query
+  $.obj[3,5,7]              -- multiple array indexes
 ```
-### Filters (TODO)
+#### Filters (TODO)
 ```
-  $.obj[?(@.price > 1000)] -- filter expression
+  @                  -- the current node
+  [?(<expression>)]  -- filter expression. Applicable to arrays only
 ```
+
 ### Updates (TODO)
+
 ```
-  $.obj[?(@.price > 1000)].expensive = true  -- add/replace field value
-  $.obj[?(@.authors.size() > 2)].title += " (group of authors)"  -- expand field value
+  $.obj[?(@.price > 1000)].expensive = true                    -- add/replace field value
+  $.obj[?(@.authors.size() > 2)].title += " (multi authored)"  -- expand field value
+  $.obj[?(@.price > $.expensive)].bonus = $.bonuses[0].value   -- add/replace field using another jsonpath 
 ```
 
 ## Examples
@@ -149,6 +158,8 @@ Currently only dot notation (`$.foo.bar`) is supported.
   `./main sample0.json '$.store.book[0].title'`  
   `./main sample0.json '$.store.book[0:-1]'`  
   `./main sample1.json '$[1].author'`  
+  `./main sample0.json '$.store.books[?(@.price > 1000)]'`  
+  `./main sample0.json '$.store.books[?(@.price > $.expensive)]'`  
   
 ## Contributing
 1. Fork it!

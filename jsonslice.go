@@ -55,6 +55,7 @@ type tToken struct {
 	Type  int8 // properties
 	Left  int  // >=0 index from the start, <0 backward index from the end
 	Right int  // 0 till the end inclusive, >0 to index exclusive, <0 backward index from the end exclusive
+	Elems []int
 	Next  *tToken
 }
 
@@ -255,7 +256,7 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 		return nil, errors.New("array not found at " + tok.Key)
 	}
 	i := 1 // skip '['
-	elems := make([]tElem, 0)
+	elems := make([]tElem, 0, 32)
 	// scan for elements
 	for ch := input[i]; i < l && ch != ']'; ch = input[i] {
 		e, err := skipValue(input, i)
@@ -398,7 +399,7 @@ func checkValueType(input []byte, tok *tToken) error {
 
 func nextKey(input []byte, i int) ([]byte, int) {
 	status := keySeek
-	key := make([]byte, 0)
+	key := make([]byte, 0, 32)
 	for l := len(input); i < l; i++ {
 		ch := input[i]
 		switch {
