@@ -74,7 +74,7 @@ func Test_SimpleCases(t *testing.T) {
 	}
 }
 
-func Test_NonDeterministic(t *testing.T) {
+func Test_Aggregated(t *testing.T) {
 	expected := []byte(`[{"author": "Evelyn Waugh"},{"author": "Herman Melville"}]`)
 	path := "$.store.book[1:3].author"
 	res, err := Get(data, path)
@@ -89,6 +89,15 @@ func Test_NonDeterministic(t *testing.T) {
 	}
 }
 
+func Test_10Mb(t *testing.T) {
+	largeData := GenerateLargeData()
+	expected := []byte(`"Sword of Honour"`)
+	path := "$.store.book[100000].title"
+	res, err := Get(largeData, path)
+	if compareSlices(res, expected) != 0 && err == nil {
+		t.Errorf(path + "\nexpected:\n" + string(expected) + "\ngot:\n" + string(res))
+	}
+}
 func Benchmark_Unmarshal(b *testing.B) {
 	var jdata interface{}
 	for i := 0; i < b.N; i++ {
@@ -118,8 +127,70 @@ func Benchmark_Jsonslice_Get(b *testing.B) {
 	}
 }
 
-func Benchmark_Jsonslice_Get_NonDeterministic(b *testing.B) {
+func Benchmark_Jsonslice_Get_Aggregated(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = Get(data, "$.store.book[1:4].isbn")
+	}
+}
+
+func GenerateLargeData() []byte {
+	largeData := []byte(`{"store":{ "book": [`)
+	book0, _ := Get(data, "$.store.book[0]")
+	book1, _ := Get(data, "$.store.book[1]")
+	for i := 0; i < 100000; i++ {
+		largeData = append(largeData, book0...)
+		largeData = append(largeData, ',')
+	}
+	largeData = append(largeData, book1...)
+	largeData = append(largeData, []byte("]}")...)
+	return largeData
+}
+func Benchmark_Unmarshal_10Mb(b *testing.B) {
+	var jdata interface{}
+	b.StopTimer()
+	largeData := GenerateLargeData()
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		json.Unmarshal(largeData, &jdata)
+	}
+}
+
+func Benchmark_Oliveagle_Jsonpath_10Mb_First(b *testing.B) {
+	b.StopTimer()
+	var jdata interface{}
+	largeData := GenerateLargeData()
+	json.Unmarshal(largeData, &jdata)
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = jsonpath.JsonPathLookup(jdata, "$.store.book[0].title")
+	}
+}
+
+func Benchmark_Oliveagle_Jsonpath_10Mb_Last(b *testing.B) {
+	b.StopTimer()
+	var jdata interface{}
+	largeData := GenerateLargeData()
+	json.Unmarshal(largeData, &jdata)
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = jsonpath.JsonPathLookup(jdata, "$.store.book[100000].title")
+	}
+}
+
+func Benchmark_Jsonslice_Get_10Mb_First(b *testing.B) {
+	b.StopTimer()
+	largeData := GenerateLargeData()
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = Get(largeData, "$.store.book[0].title")
+	}
+}
+
+func Benchmark_Jsonslice_Get_10Mb_Last(b *testing.B) {
+	b.StopTimer()
+	largeData := GenerateLargeData()
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = Get(largeData, "$.store.book[100000].title")
 	}
 }

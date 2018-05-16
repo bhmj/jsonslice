@@ -310,8 +310,28 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 		return nil, errors.New("array not found at " + tok.Key)
 	}
 	i := 1 // skip '['
+	// select by positive index -- easier case
+	if tok.Type&cArrayRanged == 0 && tok.Left >= 0 {
+		ielem := 0
+		for ch := input[i]; i < l && ch != ']'; ch = input[i] {
+			e, err := skipValue(input, i)
+			if err != nil {
+				return nil, err
+			}
+			if ielem == tok.Left {
+				return input[i:e], nil
+			}
+			// skip spaces after value
+			i, err = skipSpaces(input, e)
+			if err != nil {
+				return nil, err
+			}
+			ielem++
+		}
+
+	}
 	elems := make([]tElem, 0, 32)
-	// scan for elements
+	// select by negative index or a range -- need to enumerate all elements
 	for ch := input[i]; i < l && ch != ']'; ch = input[i] {
 		e, err := skipValue(input, i)
 		if err != nil {
@@ -327,9 +347,7 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 	//   select by index(es)
 	if tok.Type&cArrayRanged == 0 {
 		a := tok.Left
-		if a < 0 {
-			a += len(elems)
-		}
+		a += len(elems) // tok.Left is negative, so corrent it to a real element index
 		if a < 0 || a >= len(elems) {
 			return nil, errors.New(tok.Key + "[" + strconv.Itoa(tok.Left) + "] does not exist")
 		}
