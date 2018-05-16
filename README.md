@@ -3,7 +3,7 @@
 ## Changelog
 
 **0.3.0** (2018-05-05) -- beta
-**0.4.0** (2018-05-16) -- non-deterministic sub-querying added (`$.store.books[1:3].author` -> `[{"author":"John"}, {"author":"William"}]`)
+**0.4.0** (2018-05-16) -- aggregating sub-querying added (`$.store.books[1:3].author` -> `[{"author":"John"}, {"author":"William"}]`)
 
 ## What is it?
 
@@ -100,7 +100,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
 
 ## Expressions
 
-### Deterministic expressions
+### Common expressions
 
 #### Operators 
 ```
@@ -138,7 +138,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
   $.obj[3:5] -- items from index 2 (inclusive) to index 5 (exclusive)
 ```
 
-### Non-deterministic expressions
+### Aggregating expressions
 
 #### Sub-querying (TODO)
 ```

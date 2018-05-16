@@ -48,8 +48,8 @@ const (
 	cFunction = 1 << iota
 	// function subject
 	cSubject = 1 << iota
-	// non-deterministic
-	cFuzzy = 1 << iota
+	// aggregating
+	cAgg = 1 << iota
 )
 
 type tToken struct {
@@ -122,7 +122,7 @@ func parsePath(path []byte) (*tToken, error) {
 		}
 	}
 	if tok.Type&cArrayRanged > 0 && tok.Type&cIsTerminal == 0 {
-		tok.Type |= cFuzzy
+		tok.Type |= cAgg
 	}
 	if path[i] != '.' {
 		return nil, errors.New("path: invalid element reference ('.' expected)")
@@ -187,7 +187,7 @@ func getValue(input []byte, tok *tToken) (result []byte, err error) {
 		if err != nil {
 			return nil, err
 		}
-		if tok.Type&cFuzzy > 0 {
+		if tok.Type&cAgg > 0 {
 			return getNodes(input, tok.Next)
 		}
 	}
