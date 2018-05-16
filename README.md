@@ -23,7 +23,7 @@ $ go get github.com/bhmj/jsonslice
 #### 2. use it
 
 ```
-import "github.com/bhmj/jsonslice
+import "github.com/bhmj/jsonslice"
 
 func main() {
   var data = []byte(`{ "some": { "value": "hi!" } }`)
