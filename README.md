@@ -2,8 +2,9 @@
 
 ## Changelog
 
-**0.3.0** (2018-05-05) -- beta
-**0.4.0** (2018-05-16) -- aggregating sub-querying added (`$.store.books[1:3].author` -> `[{"author":"John"}, {"author":"William"}]`)
+**0.3.0** (2018-05-05) -- beta  
+**0.4.0** (2018-05-16) -- aggregating sub-querying added  
+> (`$.store.books[1:3].author` -> `[{"author":"John"}, {"author":"William"}]`)
 
 ## What is it?
 
