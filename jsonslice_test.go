@@ -63,7 +63,7 @@ func compareSlices(s1 []byte, s2 []byte) int {
 	return 0
 }
 
-func TestGet(t *testing.T) {
+func Test_SimpleCases(t *testing.T) {
 	res, err := Get(data, "$.expensive")
 	if compareSlices(res, []byte("10")) != 0 && err == nil {
 		t.Errorf("expensive should be 10, but got \"" + string(res) + "\"")
@@ -74,31 +74,52 @@ func TestGet(t *testing.T) {
 	}
 }
 
-func BenchmarkPath(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		_, _ = parsePath([]byte("$.store.book[3].title"))
+func Test_NonDeterministic(t *testing.T) {
+	expected := []byte(`[{"author": "Evelyn Waugh"},{"author": "Herman Melville"}]`)
+	path := "$.store.book[1:3].author"
+	res, err := Get(data, path)
+	if compareSlices(res, expected) != 0 && err == nil {
+		t.Errorf(path + "\nexpected:\n" + string(expected) + "\ngot:\n" + string(res))
+	}
+	expected = []byte(`[{"isbn": "0-553-21311-3"},{"isbn": "0-395-19395-8"}]`)
+	path = "$.store.book[1:].isbn"
+	res, err = Get(data, path)
+	if compareSlices(res, expected) != 0 && err == nil {
+		t.Errorf(path + "\nexpected:\n" + string(expected) + "\ngot:\n" + string(res))
 	}
 }
 
-func BenchmarkGet(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		_, _ = Get(data, "$.store.book[3].title")
-	}
-}
-
-func BenchmarkUnmarshal(b *testing.B) {
+func Benchmark_Unmarshal(b *testing.B) {
 	var jdata interface{}
 	for i := 0; i < b.N; i++ {
 		json.Unmarshal(data, &jdata)
 	}
 }
 
-func BenchmarkJsonpath(b *testing.B) {
+func Benchmark_Oliveagle_Jsonpath(b *testing.B) {
 	b.StopTimer()
 	var jdata interface{}
 	json.Unmarshal(data, &jdata)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = jsonpath.JsonPathLookup(jdata, "$.store.book[3].title")
+	}
+}
+
+func Benchmark_JsonSlice_ParsePath(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, _ = parsePath([]byte("$.store.book[3].title"))
+	}
+}
+
+func Benchmark_Jsonslice_Get(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, _ = Get(data, "$.store.book[3].title")
+	}
+}
+
+func Benchmark_Jsonslice_Get_NonDeterministic(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, _ = Get(data, "$.store.book[1:4].isbn")
 	}
 }

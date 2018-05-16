@@ -41,20 +41,22 @@ const (
 	// array node
 	cArrayType = 1 << iota
 	// array properties
-	cArrBounded = 1 << iota // bounded [x:y] or indexed [x]
+	cArrayRanged = 1 << iota // ranged [x:y] or indexed [x]
 	// terminal node
 	cIsTerminal = 1 << iota
 	// function
 	cFunction = 1 << iota
 	// function subject
 	cSubject = 1 << iota
+	// non-deterministic
+	cFuzzy = 1 << iota
 )
 
 type tToken struct {
 	Key   string
-	Type  int8 // properties
-	Left  int  // >=0 index from the start, <0 backward index from the end
-	Right int  // 0 till the end inclusive, >0 to index exclusive, <0 backward index from the end exclusive
+	Type  int // properties
+	Left  int // >=0 index from the start, <0 backward index from the end
+	Right int // 0 till the end inclusive, >0 to index exclusive, <0 backward index from the end exclusive
 	Elems []int
 	Next  *tToken
 }
@@ -101,7 +103,7 @@ func parsePath(path []byte) (*tToken, error) {
 		tok.Left = ind
 		//
 		if path[i] == ':' {
-			tok.Type |= cArrBounded
+			tok.Type |= cArrayRanged
 			i++
 			ind, ii := readNumber(path, i)
 			if ind == 0 && ii > i {
@@ -119,8 +121,8 @@ func parsePath(path []byte) (*tToken, error) {
 			return tok, nil
 		}
 	}
-	if tok.Type&cArrBounded > 0 && tok.Type&cIsTerminal == 0 {
-		return nil, errors.New("path: indefinite references are not yet supported")
+	if tok.Type&cArrayRanged > 0 && tok.Type&cIsTerminal == 0 {
+		tok.Type |= cFuzzy
 	}
 	if path[i] != '.' {
 		return nil, errors.New("path: invalid element reference ('.' expected)")
@@ -154,7 +156,7 @@ func getValue(input []byte, tok *tToken) (result []byte, err error) {
 	}
 	if tok.Key != "$" {
 		// find the key and seek to the value
-		input, err = getKeyValue(input, tok.Key)
+		input, err = getKeyValue(input, tok.Key, false)
 		if err != nil {
 			return nil, err
 		}
@@ -185,24 +187,68 @@ func getValue(input []byte, tok *tToken) (result []byte, err error) {
 		if err != nil {
 			return nil, err
 		}
+		if tok.Type&cFuzzy > 0 {
+			return getNodes(input, tok.Next)
+		}
 	}
 	return getValue(input, tok.Next)
+}
+
+func getNodes(input []byte, tok *tToken) ([]byte, error) {
+	var err error
+	var kvalue []byte
+	var e int
+	l := len(input)
+	i := 1 // skip '['
+
+	// scan for elements
+	var result []byte
+	for ch := input[i]; i < l && ch != ']'; ch = input[i] {
+		i, err = skipSpaces(input, i)
+		if err != nil {
+			return nil, err
+		}
+		e, err = skipValue(input, i)
+		if err != nil {
+			return nil, err
+		}
+		kvalue, err = getKeyValue(input[i:], tok.Key, true)
+		if err == nil {
+			if len(result) == 0 {
+				result = []byte{'['}
+			} else {
+				result = append(result, ',')
+			}
+			result = append(result, append([]byte{'{'}, append(kvalue, '}')...)...)
+		}
+		// skip spaces after value
+		i, err = skipSpaces(input, e)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(result) > 0 {
+		result = append(result[:len(result):len(result)], ']')
+	}
+	return result, nil
 }
 
 const keySeek = 1
 const keyOpen = 2
 const keyClose = 4
 
-// getKeyValue: find the key and seek to the value
-func getKeyValue(input []byte, key string) ([]byte, error) {
+// getKeyValue: find the key and seek to the value. Cut value if needed
+func getKeyValue(input []byte, key string, cut bool) ([]byte, error) {
 	var err error
 	if input[0] != '{' {
 		return nil, errors.New("object expected")
 	}
 
 	i := 1
+	e := 0
 	l := len(input)
 	k := make([]byte, 0, 32)
+	kstart := 0
 
 	for i < l && input[i] != '}' {
 		state := keySeek
@@ -212,6 +258,7 @@ func getKeyValue(input []byte, key string) ([]byte, error) {
 			case keySeek:
 				if ch == '"' {
 					state = keyOpen
+					kstart = i
 				}
 			case keyOpen:
 				if ch == '"' {
@@ -229,13 +276,20 @@ func getKeyValue(input []byte, key string) ([]byte, error) {
 				return nil, err
 			}
 			if key == string(k) {
+				if cut {
+					e, err = skipValue(input, i)
+					if err != nil {
+						return nil, err
+					}
+					return input[kstart:e], nil
+				}
 				return input[i:], nil
 			}
-			i, err = skipValue(input, i)
+			e, err = skipValue(input, i)
 			if err != nil {
 				return nil, err
 			}
-			i, err = skipSpaces(input, i)
+			i, err = skipSpaces(input, e)
 			if err != nil {
 				return nil, err
 			}
@@ -271,7 +325,7 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 		}
 	}
 	//   select by index(es)
-	if tok.Type&cArrBounded == 0 {
+	if tok.Type&cArrayRanged == 0 {
 		a := tok.Left
 		if a < 0 {
 			a += len(elems)
@@ -297,7 +351,9 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 	if a < 0 || a >= len(elems) || b < 0 || b >= len(elems) {
 		return nil, errors.New(tok.Key + "[" + strconv.Itoa(tok.Left) + ":" + strconv.Itoa(tok.Right) + "] does not exist")
 	}
-	return append([]byte{'['}, append(input[elems[a].start:elems[b].end], ']')...), nil
+	input = input[elems[a].start:elems[b].end]
+	input = input[:len(input):len(input)]
+	return append([]byte{'['}, append(input, ']')...), nil
 }
 
 // sliceValue: slice a single value

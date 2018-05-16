@@ -3,6 +3,7 @@
 ## Changelog
 
 **0.3.0** (2018-05-05) -- beta
+**0.4.0** (2018-05-16) -- non-deterministic sub-querying added (`$.store.books[1:3].author` -> `[{"author":"John"}, {"author":"William"}]`)
 
 ## What is it?
 
@@ -24,11 +25,19 @@ $ go get github.com/bhmj/jsonslice
 
 ```
 import "github.com/bhmj/jsonslice"
+import "fmt"
 
 func main() {
-  var data = []byte(`{ "some": { "value": "hi!" } }`)
+  var data = []byte(`
+    { "arr": [ 
+        { "elem": {"text": "hi!"} } 
+      ]
+    }
+  `)
 
-  v, err := jsonslice.Get(data, "$.some.value")
+  v, err := jsonslice.Get(data, "$.arr[0].elem")
+
+  fmt.Println(string(v)) // {"text": "hi!"}
 }
 ```
 
