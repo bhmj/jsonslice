@@ -196,30 +196,31 @@ func getValue(input []byte, tok *tToken) (result []byte, err error) {
 
 func getNodes(input []byte, tok *tToken) ([]byte, error) {
 	var err error
-	var kvalue []byte
+	var value []byte
 	var e int
 	l := len(input)
 	i := 1 // skip '['
 
+	i, err = skipSpaces(input, i)
+	if err != nil {
+		return nil, err
+	}
 	// scan for elements
 	var result []byte
 	for ch := input[i]; i < l && ch != ']'; ch = input[i] {
-		i, err = skipSpaces(input, i)
-		if err != nil {
-			return nil, err
-		}
-		e, err = skipValue(input, i)
-		if err != nil {
-			return nil, err
-		}
-		kvalue, err = getKeyValue(input[i:], tok.Key, true)
+		value, err = getValue(input[i:], tok)
 		if err == nil {
 			if len(result) == 0 {
 				result = []byte{'['}
 			} else {
 				result = append(result, ',')
 			}
-			result = append(result, append([]byte{'{'}, append(kvalue, '}')...)...)
+			result = append(result, value...)
+		}
+		// skip value
+		e, err = skipValue(input, i)
+		if err != nil {
+			return nil, err
 		}
 		// skip spaces after value
 		i, err = skipSpaces(input, e)
@@ -248,7 +249,6 @@ func getKeyValue(input []byte, key string, cut bool) ([]byte, error) {
 	e := 0
 	l := len(input)
 	k := make([]byte, 0, 32)
-	kstart := 0
 
 	for i < l && input[i] != '}' {
 		state := keySeek
@@ -258,7 +258,6 @@ func getKeyValue(input []byte, key string, cut bool) ([]byte, error) {
 			case keySeek:
 				if ch == '"' {
 					state = keyOpen
-					kstart = i
 				}
 			case keyOpen:
 				if ch == '"' {
@@ -281,7 +280,7 @@ func getKeyValue(input []byte, key string, cut bool) ([]byte, error) {
 					if err != nil {
 						return nil, err
 					}
-					return input[kstart:e], nil
+					return input[i:e], nil
 				}
 				return input[i:], nil
 			}

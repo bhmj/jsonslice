@@ -75,13 +75,13 @@ func Test_SimpleCases(t *testing.T) {
 }
 
 func Test_Aggregated(t *testing.T) {
-	expected := []byte(`[{"author": "Evelyn Waugh"},{"author": "Herman Melville"}]`)
+	expected := []byte(`["Evelyn Waugh","Herman Melville"]`)
 	path := "$.store.book[1:3].author"
 	res, err := Get(data, path)
 	if compareSlices(res, expected) != 0 && err == nil {
 		t.Errorf(path + "\nexpected:\n" + string(expected) + "\ngot:\n" + string(res))
 	}
-	expected = []byte(`[{"isbn": "0-553-21311-3"},{"isbn": "0-395-19395-8"}]`)
+	expected = []byte(`["0-553-21311-3","0-395-19395-8"]`)
 	path = "$.store.book[1:].isbn"
 	res, err = Get(data, path)
 	if compareSlices(res, expected) != 0 && err == nil {
@@ -155,6 +155,7 @@ func Benchmark_Unmarshal_10Mb(b *testing.B) {
 	}
 }
 
+/*
 func Benchmark_Oliveagle_Jsonpath_10Mb_First(b *testing.B) {
 	b.StopTimer()
 	var jdata interface{}
@@ -176,7 +177,7 @@ func Benchmark_Oliveagle_Jsonpath_10Mb_Last(b *testing.B) {
 		_, _ = jsonpath.JsonPathLookup(jdata, "$.store.book[100000].title")
 	}
 }
-
+*/
 func Benchmark_Jsonslice_Get_10Mb_First(b *testing.B) {
 	b.StopTimer()
 	largeData := GenerateLargeData()
