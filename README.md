@@ -1,7 +1,5 @@
 # JSON Slice
 
-![Build Status]
-
 ## Changelog
 
 **0.3.0** (2018-05-05) -- beta  
