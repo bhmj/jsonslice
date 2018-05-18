@@ -207,7 +207,7 @@ func getNodes(input []byte, tok *tToken) ([]byte, error) {
 	}
 	// scan for elements
 	var result []byte
-	for ch := input[i]; i < l && ch != ']'; ch = input[i] {
+	for i < l && input[i] != ']' {
 		value, err = getValue(input[i:], tok)
 		if err == nil {
 			if len(result) == 0 {
@@ -241,6 +241,7 @@ const keyClose = 4
 // getKeyValue: find the key and seek to the value. Cut value if needed
 func getKeyValue(input []byte, key string, cut bool) ([]byte, error) {
 	var err error
+	var ch byte
 	if input[0] != '{' {
 		return nil, errors.New("object expected")
 	}
@@ -253,18 +254,16 @@ func getKeyValue(input []byte, key string, cut bool) ([]byte, error) {
 	for i < l && input[i] != '}' {
 		state := keySeek
 		k = k[:0]
-		for ch := input[i]; i < l && state != keyClose; ch = input[i] {
-			switch state {
-			case keySeek:
-				if ch == '"' {
+		for i < l && state != keyClose {
+			ch = input[i]
+			if ch == '"' {
+				if state == keySeek {
 					state = keyOpen
-				}
-			case keyOpen:
-				if ch == '"' {
+				} else if state == keyOpen {
 					state = keyClose
-				} else {
-					k = append(k, byte(ch))
 				}
+			} else {
+				k = append(k, byte(ch))
 			}
 			i++
 		}
@@ -312,7 +311,7 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 	// select by positive index -- easier case
 	if tok.Type&cArrayRanged == 0 && tok.Left >= 0 {
 		ielem := 0
-		for ch := input[i]; i < l && ch != ']'; ch = input[i] {
+		for i < l && input[i] != ']' {
 			e, err := skipValue(input, i)
 			if err != nil {
 				return nil, err
@@ -331,7 +330,7 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 	}
 	elems := make([]tElem, 0, 32)
 	// select by negative index or a range -- need to enumerate all elements
-	for ch := input[i]; i < l && ch != ']'; ch = input[i] {
+	for i < l && input[i] != ']' {
 		e, err := skipValue(input, i)
 		if err != nil {
 			return nil, err
@@ -410,6 +409,9 @@ func skipValue(input []byte, i int) (int, error) {
 	}
 
 	l := len(input)
+	if i >= l {
+		return i, nil
+	}
 	if input[i] == '"' {
 		// string
 		return skipString(input, i)
@@ -421,7 +423,8 @@ func skipValue(input []byte, i int) (int, error) {
 		instr := false
 		prev := mark
 		i++
-		for ch := input[i]; i < l && !(ch == unmark && nested == 0); ch = input[i] {
+		for ch := input[i]; i < l && !(ch == unmark && nested == 0); {
+			ch = input[i]
 			if ch == '"' {
 				if prev != '\\' {
 					instr = !instr
@@ -442,8 +445,11 @@ func skipValue(input []byte, i int) (int, error) {
 		i++ // closing mark
 	} else {
 		// number, bool, null
-		for ch := input[i]; i < l && ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r' && ch != ',' && ch != '}'; ch = input[i] {
-			i++
+		for ; i < l; i++ {
+			ch := input[i]
+			if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == ',' || ch == '}' {
+				break
+			}
 		}
 	}
 	return i, nil
@@ -506,7 +512,7 @@ func doFunc(input []byte, tok *tToken) ([]byte, error) {
 			i := 1
 			l := len(input)
 			// count elements
-			for ch := input[i]; i < l && ch != ']'; ch = input[i] {
+			for i < l && input[i] != ']' {
 				e, err := skipValue(input, i)
 				if err != nil {
 					return nil, err
@@ -532,22 +538,29 @@ func doFunc(input []byte, tok *tToken) ([]byte, error) {
 func readNumber(path []byte, i int) (int, int) {
 	sign := 1
 	l := len(path)
+	if i >= l {
+		return 0, i
+	}
 	ind := 0
-	for ch := path[i]; i < l && (ch == '-' || (ch >= '0' && ch <= '9')); ch = path[i] {
+	for ch := path[i]; i < l && (ch == '-' || (ch >= '0' && ch <= '9')); {
 		if ch == '-' {
 			sign = -1
 		} else {
 			ind = ind*10 + int(ch-'0')
 		}
 		i++
+		ch = path[i]
 	}
 	return ind * sign, i
 }
 
 func skipSpaces(input []byte, i int) (int, error) {
 	l := len(input)
-	for ch := input[i]; i < l && (ch == ',' || ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'); ch = input[i] {
-		i++
+	for ; i < l; i++ {
+		ch := input[i]
+		if !(ch == ',' || ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
+			break
+		}
 	}
 	if i == l {
 		return 0, errors.New("unexpected end of input")
@@ -560,7 +573,8 @@ func skipString(input []byte, i int) (int, error) {
 	done := false
 	i++
 	l := len(input)
-	for ch := input[i]; i < l && !done; ch = input[i] {
+	for i < l && !done {
+		ch := input[i]
 		if ch == '"' && prev != '\\' {
 			done = true
 		}

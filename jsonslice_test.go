@@ -1,8 +1,11 @@
 package jsonslice
 
 import (
+	"encoding/hex"
 	"encoding/json"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/oliveagle/jsonpath"
 )
@@ -51,6 +54,26 @@ func init() {
 	`)
 }
 
+func TestFuzzy(t *testing.T) {
+	var str string
+	defer func() {
+		if v := recover(); v != nil {
+			println("'" + hex.EncodeToString([]byte(str)) + "'")
+			println("'" + str + "'")
+			panic(v)
+		}
+	}()
+	rand.Seed(time.Now().UnixNano())
+	b := make([]byte, 500)
+	for i := 0; i < 100000000; i++ {
+		n, err := rand.Read(b[:rand.Int()%len(b)])
+		if err != nil {
+			t.Fatal(err)
+		}
+		str = string(b[:n])
+		Get([]byte(str), "$.some.value")
+	}
+}
 func compareSlices(s1 []byte, s2 []byte) int {
 	if len(s1) != len(s2) {
 		return len(s1) - len(s2)
