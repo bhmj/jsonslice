@@ -3,6 +3,7 @@ package jsonslice
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -65,7 +66,12 @@ func TestFuzzy(t *testing.T) {
 	}()
 	rand.Seed(time.Now().UnixNano())
 	b := make([]byte, 500)
-	for i := 0; i < 100000000; i++ {
+	top := 10000000
+	fmt.Printf("\r[                    ]\r[")
+	for i := 0; i < top; i++ {
+		if i%(top/20) == 1 {
+			fmt.Printf(".")
+		}
 		n, err := rand.Read(b[:rand.Int()%len(b)])
 		if err != nil {
 			t.Fatal(err)
@@ -73,6 +79,7 @@ func TestFuzzy(t *testing.T) {
 		str = string(b[:n])
 		Get([]byte(str), "$.some.value")
 	}
+	fmt.Println()
 }
 func compareSlices(s1 []byte, s2 []byte) int {
 	if len(s1) != len(s2) {

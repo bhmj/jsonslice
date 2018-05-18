@@ -113,6 +113,7 @@ func parsePath(path []byte) (*tToken, error) {
 		tok.Left = num
 		//
 		if path[i] == ',' {
+			tok.Type |= cAgg
 			tok.Elems = append(tok.Elems, num)
 			for i < l && path[i] != ']' {
 				i++
@@ -362,7 +363,7 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 	if len(tok.Elems) > 0 {
 		result := []byte{'['}
 		for _, ii := range tok.Elems {
-			if len(result) < 2 {
+			if len(result) > 2 {
 				result = append(result, ',')
 			}
 			result = append(result, input[elems[ii].start:elems[ii].end]...)
