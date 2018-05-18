@@ -25,6 +25,10 @@ func init() {
 // Get the jsonpath subset of the input
 func Get(input []byte, path string) ([]byte, error) {
 
+	if string(path) == `$` {
+		return input, nil
+	}
+
 	if path[0] != '$' {
 		return nil, errors.New("path: $ expected")
 	}
@@ -95,28 +99,34 @@ func parsePath(path []byte) (*tToken, error) {
 	if path[i] == '[' {
 		tok.Type = cArrayType
 		i++
-		ind := 0
-		ind, i = readNumber(path, i)
+		num := 0
+		num, i = readNumber(path, i)
 		if i == l || (path[i] != ':' && path[i] != ']') {
 			return nil, errors.New("path: index bound missing")
 		}
-		tok.Left = ind
+		tok.Left = num
 		//
-		if path[i] == ':' {
+		if path[i] == ',' {
+			tok.Elems = append(tok.Elems, num)
+			for i < l && path[i] != ']' {
+				num, i = readNumber(path, i)
+				tok.Elems = append(tok.Elems, num)
+			}
+		} else if path[i] == ':' {
 			tok.Type |= cArrayRanged
 			i++
-			ind, ii := readNumber(path, i)
-			if ind == 0 && ii > i {
+			num, ii := readNumber(path, i)
+			if num == 0 && ii > i {
 				return nil, errors.New("path: 0 as a second bound does not make sense")
 			}
 			if ii == l || path[ii] != ']' {
 				return nil, errors.New("path: index bound missing")
 			}
 			i = ii
-			tok.Right = ind
+			tok.Right = num
 		}
 		i++
-		if i == l {
+		if i >= l {
 			tok.Type |= cIsTerminal
 			return tok, nil
 		}
@@ -341,6 +351,16 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+	if len(tok.Elems) > 0 {
+		result := []byte{'['}
+		for _, ii := range tok.Elems {
+			if len(result) < 2 {
+				result = append(result, ',')
+			}
+			result = append(result, input[elems[ii].start:elems[ii].end]...)
+		}
+		return append(result, ']'), nil
 	}
 	//   select by index(es)
 	if tok.Type&cArrayRanged == 0 {

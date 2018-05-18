@@ -110,6 +110,12 @@ func Test_Aggregated(t *testing.T) {
 	if compareSlices(res, expected) != 0 && err == nil {
 		t.Errorf(path + "\nexpected:\n" + string(expected) + "\ngot:\n" + string(res))
 	}
+	expected = []byte(`["Sayings of the Century","Moby Dick"]`)
+	path = "$.store.book[0,2].title"
+	res, err = Get(data, path)
+	if compareSlices(res, expected) != 0 && err == nil {
+		t.Errorf(path + "\nexpected:\n" + string(expected) + "\ngot:\n" + string(res))
+	}
 }
 
 func Test_10Mb(t *testing.T) {
