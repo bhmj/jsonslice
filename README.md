@@ -4,7 +4,7 @@
 
 **0.3.0** (2018-05-05) -- beta  
 **0.4.0** (2018-05-16) -- aggregating sub-queries added  
-> `$.store.books[1:3].author` -> `[{"author":"John"}, {"author":"William"}]`
+> `$.store.books[1:3].author` -> `["John","William"]`
 
 ## What is it?
 
