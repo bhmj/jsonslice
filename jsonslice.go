@@ -11,15 +11,12 @@ package jsonslice
 
 import (
 	"errors"
-	"reflect"
 	"strconv"
 )
 
 var intSize uintptr
 
 func init() {
-	i := int(123)
-	intSize = reflect.TypeOf(i).Size()
 }
 
 // Get the jsonpath subset of the input
@@ -56,13 +53,22 @@ const (
 	cAgg = 1 << iota
 )
 
+type tExpr struct {
+}
+type tValue struct {
+	Num int64
+	Str []byte
+}
 type tToken struct {
+	Base  byte // $ or @
 	Key   string
 	Type  int // properties
 	Left  int // >=0 index from the start, <0 backward index from the end
 	Right int // 0 till the end inclusive, >0 to index exclusive, <0 backward index from the end exclusive
 	Elems []int
 	Next  *tToken
+	Value *tValue
+	Expr  *tExpr
 }
 
 func parsePath(path []byte) (*tToken, error) {
@@ -101,7 +107,7 @@ func parsePath(path []byte) (*tToken, error) {
 		i++
 		num := 0
 		num, i = readNumber(path, i)
-		if i == l || (path[i] != ':' && path[i] != ']') {
+		if i == l || (path[i] != ':' && path[i] != ']' && path[i] != ',') {
 			return nil, errors.New("path: index bound missing")
 		}
 		tok.Left = num
@@ -109,6 +115,7 @@ func parsePath(path []byte) (*tToken, error) {
 		if path[i] == ',' {
 			tok.Elems = append(tok.Elems, num)
 			for i < l && path[i] != ']' {
+				i++
 				num, i = readNumber(path, i)
 				tok.Elems = append(tok.Elems, num)
 			}
@@ -272,7 +279,7 @@ func getKeyValue(input []byte, key string, cut bool) ([]byte, error) {
 				} else if state == keyOpen {
 					state = keyClose
 				}
-			} else {
+			} else if state == keyOpen {
 				k = append(k, byte(ch))
 			}
 			i++
@@ -319,7 +326,7 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 	}
 	i := 1 // skip '['
 	// select by positive index -- easier case
-	if tok.Type&cArrayRanged == 0 && tok.Left >= 0 {
+	if tok.Type&cArrayRanged == 0 && tok.Left >= 0 && len(tok.Elems) == 0 {
 		ielem := 0
 		for i < l && input[i] != ']' {
 			e, err := skipValue(input, i)
@@ -443,8 +450,8 @@ func skipValue(input []byte, i int) (int, error) {
 		instr := false
 		prev := mark
 		i++
-		for ch := input[i]; i < l && !(ch == unmark && nested == 0); {
-			ch = input[i]
+		for i < l && !(input[i] == unmark && nested == 0) {
+			ch := input[i]
 			if ch == '"' {
 				if prev != '\\' {
 					instr = !instr
