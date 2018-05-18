@@ -141,7 +141,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
 
 ### Aggregating expressions
 
-#### Sub-querying (TODO)
+#### Sub-querying
 ```
   $.obj[any:any].something  -- composite sub-query
   $.obj[3,5,7]              -- multiple array indexes
