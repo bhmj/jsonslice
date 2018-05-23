@@ -53,11 +53,21 @@ const (
 	cAgg = 1 << iota
 )
 
-type tExpr struct {
+type tFilter struct {
+	Single      bool
+	Left, Right tExpr
+	Compare     string
 }
-type tValue struct {
+type tExpr struct {
+	Single bool
+	Left, Right tOperand
+	Operator tOperator
+}
+type tOperand strunct {
+	Type int
 	Num int64
 	Str []byte
+	Node tToken
 }
 type tToken struct {
 	Base  byte // $ or @
@@ -67,11 +77,11 @@ type tToken struct {
 	Right int // 0 till the end inclusive, >0 to index exclusive, <0 backward index from the end exclusive
 	Elems []int
 	Next  *tToken
-	Value *tValue
-	Expr  *tExpr
+	Filter  *tFilter
 }
 
 func parsePath(path []byte) (*tToken, error) {
+	var err error
 	tok := &tToken{}
 	i := 0
 	l := len(path)
@@ -88,7 +98,7 @@ func parsePath(path []byte) (*tToken, error) {
 		return tok, nil
 	}
 	// function
-	if path[i] == '(' && i < l && path[i+1] == ')' {
+	if path[i] == '(' && i < l-1 && path[i+1] == ')' {
 		switch tok.Key {
 		case "length":
 		case "size":
@@ -105,34 +115,41 @@ func parsePath(path []byte) (*tToken, error) {
 	if path[i] == '[' {
 		tok.Type = cArrayType
 		i++
-		num := 0
-		num, i = readNumber(path, i)
-		if i == l || (path[i] != ':' && path[i] != ']' && path[i] != ',') {
-			return nil, errors.New("path: index bound missing")
-		}
-		tok.Left = num
-		//
-		if path[i] == ',' {
-			tok.Elems = append(tok.Elems, num)
-			for i < l && path[i] != ']' {
-				i++
-				num, i = readNumber(path, i)
-				tok.Elems = append(tok.Elems, num)
+		if i < l+1 && path[i] == '?' && path[i+1] == '(' {
+			i, err = readFilter(path, i, tok)
+			if err != nil {
+				return nil, err
 			}
-		} else if path[i] == ':' {
-			tok.Type |= cArrayRanged
-			i++
-			num, ii := readNumber(path, i)
-			if num == 0 && ii > i {
-				return nil, errors.New("path: 0 as a second bound does not make sense")
-			}
-			if ii == l || path[ii] != ']' {
+		} else {
+			num := 0
+			num, i = readNumber(path, i)
+			if i == l || (path[i] != ':' && path[i] != ']' && path[i] != ',') {
 				return nil, errors.New("path: index bound missing")
 			}
-			i = ii
-			tok.Right = num
+			tok.Left = num
+			//
+			if path[i] == ',' {
+				tok.Elems = append(tok.Elems, num)
+				for i < l && path[i] != ']' {
+					i++
+					num, i = readNumber(path, i)
+					tok.Elems = append(tok.Elems, num)
+				}
+			} else if path[i] == ':' {
+				tok.Type |= cArrayRanged
+				i++
+				num, ii := readNumber(path, i)
+				if num == 0 && ii > i {
+					return nil, errors.New("path: 0 as a second bound does not make sense")
+				}
+				if ii == l || path[ii] != ']' {
+					return nil, errors.New("path: index bound missing")
+				}
+				i = ii
+				tok.Right = num
+			}
+			i++
 		}
-		i++
 		if i >= l {
 			tok.Type |= cIsTerminal
 			return tok, nil
@@ -155,6 +172,10 @@ func parsePath(path []byte) (*tToken, error) {
 	}
 
 	return tok, nil
+}
+
+func readFilter(path []byte, i int, tok *tToken) (int, error) {
+	return 0, errors.New("filters are not supported yet")
 }
 
 func getValue(input []byte, tok *tToken) (result []byte, err error) {
@@ -569,14 +590,14 @@ func readNumber(path []byte, i int) (int, int) {
 		return 0, i
 	}
 	ind := 0
-	for ch := path[i]; i < l && (ch == '-' || (ch >= '0' && ch <= '9')); {
+	for i < l && (path[i] == '-' || (path[i] >= '0' && path[i] <= '9')) {
+		ch := path[i]
 		if ch == '-' {
 			sign = -1
 		} else {
 			ind = ind*10 + int(ch-'0')
 		}
 		i++
-		ch = path[i]
 	}
 	return ind * sign, i
 }

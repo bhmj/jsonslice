@@ -74,6 +74,28 @@ func TestFuzzy(t *testing.T) {
 		Get([]byte(str), "$.some.value")
 	}
 }
+
+func TestFuzzyPath(t *testing.T) {
+	var str string
+	defer func() {
+		if v := recover(); v != nil {
+			println("'" + hex.EncodeToString([]byte(str)) + "'")
+			println("'" + str + "'")
+			panic(v)
+		}
+	}()
+	rand.Seed(time.Now().UnixNano())
+	b := make([]byte, 100)
+	for i := 0; i < 10000000; i++ {
+		n, err := rand.Read(b[:rand.Int()%len(b)])
+		if err != nil {
+			t.Fatal(err)
+		}
+		str = string(b[:n])
+		parsePath([]byte(str))
+	}
+}
+
 func compareSlices(s1 []byte, s2 []byte) int {
 	if len(s1) != len(s2) {
 		return len(s1) - len(s2)
