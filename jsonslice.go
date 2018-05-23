@@ -383,7 +383,7 @@ func sliceArray(input []byte, tok *tToken) ([]byte, error) {
 	if len(tok.Elems) > 0 {
 		result := []byte{'['}
 		for _, ii := range tok.Elems {
-			if len(result) < 2 {
+			if len(result) > 2 {
 				result = append(result, ',')
 			}
 			result = append(result, input[elems[ii].start:elems[ii].end]...)
