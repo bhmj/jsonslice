@@ -417,18 +417,23 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 
 // filterMatch
 func filterMatch(input []byte, toks []*tToken) (bool, error) {
-	i := 0
-	for i < len(toks) {
-		t := toks[i]
-		if t.Operator == 0 {
-			return false, errors.New("operator expected")
-		}
-		if i < len(toks)-3 {
-			return false, errors.New("too few operands")
-		}
-
+	if len(toks) == 0 {
+		return false, errors.New("invalid filter")
 	}
-	return true, nil
+	op, err := evalToken(input, toks)
+	if err != nil {
+		return false, err
+	}
+	switch op.Type {
+	case cOpBool:
+		return op.Bool, nil
+	default:
+		return false, nil
+	}
+}
+
+func evalToken(input []byte, toks []*tToken) (tOperand, error) {
+	return tOperand{Type: cOpBool, Bool: true}, nil
 }
 
 // sliceValue: slice a single value
