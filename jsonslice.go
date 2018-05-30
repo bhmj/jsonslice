@@ -325,7 +325,7 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 		return nil, errors.New("array not found at " + nod.Key)
 	}
 	i := 1 // skip '['
-	// select by positive index -- easier case
+	// select by positive index -- easiest case
 	if nod.Type&cArrayRanged == 0 && nod.Left >= 0 && len(nod.Elems) == 0 {
 		ielem := 0
 		for i < l && input[i] != ']' {
@@ -343,14 +343,27 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 			}
 			ielem++
 		}
-
+		return nil, errors.New("specified element not found")
 	}
 	elems := make([]tElem, 0, 32)
-	// select by negative index or a range -- need to enumerate all elements
+	result := []byte{'['}
+	// fullscan
 	for i < l && input[i] != ']' {
 		e, err := skipValue(input, i)
 		if err != nil {
 			return nil, err
+		}
+		if nod.Filter != nil {
+			b, err := filterMatch(input[i:e], nod.Filter.toks)
+			if err != nil {
+				return nil, err
+			}
+			if b {
+				if len(result) > 2 {
+					result = append(result, ',')
+				}
+				result = append(result, input[i:e]...)
+			}
 		}
 		elems = append(elems, tElem{i, e})
 		// skip spaces after value
@@ -358,6 +371,9 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+	if nod.Filter != nil {
+		return append(result, ']'), nil
 	}
 	if len(nod.Elems) > 0 {
 		result := []byte{'['}
@@ -397,6 +413,22 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 	input = input[elems[a].start:elems[b].end]
 	input = input[:len(input):len(input)]
 	return append([]byte{'['}, append(input, ']')...), nil
+}
+
+// filterMatch
+func filterMatch(input []byte, toks []*tToken) (bool, error) {
+	i := 0
+	for i < len(toks) {
+		t := toks[i]
+		if t.Operator == 0 {
+			return false, errors.New("operator expected")
+		}
+		if i < len(toks)-3 {
+			return false, errors.New("too few operands")
+		}
+
+	}
+	return true, nil
 }
 
 // sliceValue: slice a single value

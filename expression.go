@@ -174,7 +174,9 @@ func nextToken(path []byte, i int) (int, *tToken, error) {
 				return i + len(cmp), &tToken{Operator: compareOps[ic]}, nil
 			}
 		}
+		return 0, nil, errors.New("unknown token " + string(path[i]))
 	}
+
 	return i, tok, nil
 }
 
