@@ -11,6 +11,7 @@ const (
 	cOpString
 	cOpNode
 	cOpOperator
+	cOpBool
 )
 
 /*
@@ -19,9 +20,10 @@ const (
   <filter> : <expression> [ <operator> <expression> ]   <--- .single
   <expression> : <operand> [ <operator> <operand> ]
   <compare> : /(==)|(!=)|(>)|(<)|(>=)|(<=)/
-  <operand> : <number> | <string> | <jsonpath>
+  <operand> : <number> | <string> | <bool> | <jsonpath>
   <number> : /-?[0-9]+(\.[0-9]*?)?/
   <string> : /"[^"]*"/
+  <bool> : /(true)|(false)/
   <jsonpath> : /[@$].+/           <--- .exists
   <operator> : /[+-/*] | (>=,<=,==,!=,>,<)/
 */
@@ -37,6 +39,7 @@ type tOperand struct {
 	Type     int
 	NumInt   int64
 	NumFloat float64
+	Bool     bool
 	Str      []byte
 	Node     *tNode
 }
@@ -150,6 +153,10 @@ func nextToken(path []byte, i int) (int, *tToken, error) {
 		if path[i] == '"' {
 			return readString(path, i)
 		}
+		// bool
+		if path[i] == 't' || path[i] == 'f' {
+			return readString(path, i)
+		}
 		// jsonpath node
 		if path[i] == '@' || path[i] == '$' {
 			nod, err := parsePath(path[i:])
@@ -234,4 +241,18 @@ func readString(path []byte, i int) (int, *tToken, error) {
 	i++ // unquote
 
 	return i, &tToken{Operand: &tOperand{Type: cOpString, Str: path[s:e]}}, nil
+}
+
+func readBool(path []byte, i int) (int, *tToken, error) {
+	s := i
+	l := len(path)
+	t, f := []byte("true\x00\x00"), []byte("false\x00")
+	for i < l && (path[i] == t[i-s] || path[i] == f[i-s]) && (t[i-s] > 0 || f[i-s] > 0) {
+		i++
+	}
+	if i == l || t[i-s] > 0 && f[i-s] > 0 {
+		return i, nil, errors.New("invalid boolean value")
+	}
+
+	return i, &tToken{Operand: &tOperand{Type: cOpBool, Bool: path[s] == 't'}}, nil
 }
