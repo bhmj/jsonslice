@@ -256,3 +256,32 @@ func readBool(path []byte, i int) (int, *tToken, error) {
 
 	return i, &tToken{Operand: &tOperand{Type: cOpBool, Bool: path[s] == 't'}}, nil
 }
+
+// filterMatch
+func filterMatch(input []byte, toks []*tToken) (bool, error) {
+	if len(toks) == 0 {
+		return false, errors.New("invalid filter")
+	}
+	op, err := evalToken(input, toks)
+	if err != nil {
+		return false, err
+	}
+	switch op.Type {
+	case cOpBool:
+		return op.Bool, nil
+	case cOpFloat:
+		return op.NumFloat > 0, nil
+	case cOpInt:
+		return op.NumInt > 0, nil
+	case cOpString:
+		return len(op.Str) > 0, nil
+	case cOpNode:
+		return op.Node.Exists, nil
+	default:
+		return false, nil
+	}
+}
+
+func evalToken(input []byte, toks []*tToken) (tOperand, error) {
+	return tOperand{Type: cOpBool, Bool: true}, nil
+}

@@ -56,6 +56,7 @@ type tNode struct {
 	Elems  []int
 	Next   *tNode
 	Filter *tFilter
+	Exists bool
 }
 
 func parsePath(path []byte) (*tNode, error) {
@@ -413,27 +414,6 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 	input = input[elems[a].start:elems[b].end]
 	input = input[:len(input):len(input)]
 	return append([]byte{'['}, append(input, ']')...), nil
-}
-
-// filterMatch
-func filterMatch(input []byte, toks []*tToken) (bool, error) {
-	if len(toks) == 0 {
-		return false, errors.New("invalid filter")
-	}
-	op, err := evalToken(input, toks)
-	if err != nil {
-		return false, err
-	}
-	switch op.Type {
-	case cOpBool:
-		return op.Bool, nil
-	default:
-		return false, nil
-	}
-}
-
-func evalToken(input []byte, toks []*tToken) (tOperand, error) {
-	return tOperand{Type: cOpBool, Bool: true}, nil
 }
 
 // sliceValue: slice a single value
