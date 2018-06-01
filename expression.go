@@ -15,6 +15,14 @@ const (
 )
 
 /*
+var operatorFn map[byte]
+
+func init() {
+	setupOperatorMap()
+}
+*/
+
+/*
   <operand> [ <operator> <operand> ] [ <compare> <operand> [ <operator> <operand> ] ]
 
   <filter> : <expression> [ <operator> <expression> ]   <--- .single
@@ -282,6 +290,40 @@ func filterMatch(input []byte, toks []*tToken) (bool, error) {
 	}
 }
 
-func evalToken(input []byte, toks []*tToken) (tOperand, error) {
-	return tOperand{Type: cOpBool, Bool: true}, nil
+func evalToken(input []byte, toks []*tToken) (*tOperand, error) {
+	l := len(toks)
+	tok := toks[0]
+	if tok.Operand != nil {
+		if tok.Operand.Type == cOpNode {
+			val, err := getValue(input, tok.Operand.Node)
+			if err != nil {
+				tok.Operand.Type = cOpBool
+				tok.Operand.Bool = false
+				return tok.Operand, nil
+			}
+			return decodeValue(val, tok.Operand)
+		}
+		return tok.Operand, nil
+	}
+	if l < 2 {
+		return nil, errors.New("not enough arguments")
+	}
+	switch tok.Operator {
+	case '+':
+
+	case '-':
+	case '*':
+	case '/':
+	case 'g':
+	case 'l':
+	case 'E':
+	case 'N':
+	case 'G':
+	case 'L':
+	}
+	return &tOperand{Type: cOpBool, Bool: true}, nil
+}
+
+func decodeValue(input []byte, op *tOperand) (*tOperand, error) {
+	return op, nil
 }
