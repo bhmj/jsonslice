@@ -2,16 +2,17 @@ package jsonslice
 
 import (
 	"errors"
+	"strconv"
 )
 
 const (
 	cOpErr = iota
-	cOpInt
-	cOpFloat
+	cOpNumber
 	cOpString
+	cOpBool
+	cOpNull
 	cOpNode
 	cOpOperator
-	cOpBool
 )
 
 /*
@@ -29,7 +30,7 @@ func init() {
   <expression> : <operand> [ <operator> <operand> ]
   <compare> : /(==)|(!=)|(>)|(<)|(>=)|(<=)/
   <operand> : <number> | <string> | <bool> | <jsonpath>
-  <number> : /-?[0-9]+(\.[0-9]*?)?/
+  <number> : /-?[0-9]+(\.[0-9]*?)?((E|e)[0-9]+)?/
   <string> : /"[^"]*"/
   <bool> : /(true)|(false)/
   <jsonpath> : /[@$].+/           <--- .exists
@@ -44,12 +45,11 @@ type tToken struct {
 	Operator byte
 }
 type tOperand struct {
-	Type     int
-	NumInt   int64
-	NumFloat float64
-	Bool     bool
-	Str      []byte
-	Node     *tNode
+	Type   int // cOp*
+	Number float64
+	Bool   bool
+	Str    []byte
+	Node   *tNode
 }
 
 var compares = [...]string{">=", "<=", "==", "!=", ">", "<"}
@@ -154,7 +154,7 @@ func nextToken(path []byte, i int) (int, *tToken, error) {
 			return i, tok, nil
 		}
 		// number
-		if path[i] >= '0' && path[i] <= '9' {
+		if (path[i] >= '0' && path[i] <= '9') || path[i] == '-' {
 			return readNumber(path, i)
 		}
 		// string
@@ -195,40 +195,16 @@ func nextToken(path []byte, i int) (int, *tToken, error) {
 	return i, tok, nil
 }
 
-func readNumber(path []byte, ii int) (int, *tToken, error) {
-	typ := cOpErr
-	i := ii
-	sign := 1
-	l := len(path)
-	inum := 0
-	fnum := 0
-	base := 1
-	num := &inum
-	for i < l && (path[i] == '-' || path[i] == '.' || (path[i] >= '0' && path[i] <= '9')) {
-		if typ == cOpErr {
-			typ = cOpInt
-		}
-		ch := path[i]
-		if ch == '-' {
-			sign = -1
-		} else if ch == '.' {
-			if typ == cOpInt {
-				typ = cOpFloat
-				num = &fnum
-			} else {
-				return i, nil, errors.New("invalid floating point number")
-			}
-		} else {
-			*num = (*num)*10 + int(ch-'0')
-			base *= 10
-		}
-		i++
+func readNumber(path []byte, i int) (int, *tToken, error) {
+	e, err := skipValue(path, i)
+	if err != nil {
+		return e, nil, err
 	}
-
-	if typ == cOpInt {
-		return i, &tToken{Operand: &tOperand{Type: typ, NumInt: int64(sign) * int64(inum)}}, nil
+	s, err := strconv.ParseFloat(string(path[i:e]), 64)
+	if err != nil {
+		return e, nil, err
 	}
-	return i, &tToken{Operand: &tOperand{Type: typ, NumFloat: float64(sign) * (float64(inum) + float64(fnum)/float64(base))}}, nil
+	return e, &tToken{Operand: &tOperand{Type: cOpNumber, Number: s}}, nil
 }
 
 func readString(path []byte, i int) (int, *tToken, error) {
@@ -270,17 +246,15 @@ func filterMatch(input []byte, toks []*tToken) (bool, error) {
 	if len(toks) == 0 {
 		return false, errors.New("invalid filter")
 	}
-	op, err := evalToken(input, toks)
+	op, _, err := evalToken(input, toks)
 	if err != nil {
 		return false, err
 	}
 	switch op.Type {
 	case cOpBool:
 		return op.Bool, nil
-	case cOpFloat:
-		return op.NumFloat > 0, nil
-	case cOpInt:
-		return op.NumInt > 0, nil
+	case cOpNumber:
+		return op.Number > 0, nil
 	case cOpString:
 		return len(op.Str) > 0, nil
 	case cOpNode:
@@ -290,40 +264,142 @@ func filterMatch(input []byte, toks []*tToken) (bool, error) {
 	}
 }
 
-func evalToken(input []byte, toks []*tToken) (*tOperand, error) {
-	l := len(toks)
+func evalToken(input []byte, toks []*tToken) (*tOperand, []*tToken, error) {
+	if len(toks) == 0 {
+		return nil, toks, errors.New("not enough arguments")
+	}
 	tok := toks[0]
 	if tok.Operand != nil {
 		if tok.Operand.Type == cOpNode {
 			val, err := getValue(input, tok.Operand.Node)
 			if err != nil {
+				// not found or other error
 				tok.Operand.Type = cOpBool
 				tok.Operand.Bool = false
-				return tok.Operand, nil
+				return tok.Operand, toks[1:], nil
 			}
-			return decodeValue(val, tok.Operand)
+			return tok.Operand, toks[1:], decodeValue(val, tok.Operand)
 		}
-		return tok.Operand, nil
+		return tok.Operand, toks[1:], nil
 	}
-	if l < 2 {
-		return nil, errors.New("not enough arguments")
+	var (
+		err   error
+		left  *tOperand
+		right *tOperand
+	)
+	left, toks, err = evalToken(input, toks[1:])
+	if err != nil {
+		return nil, toks, err
 	}
-	switch tok.Operator {
-	case '+':
+	right, toks, err = evalToken(input, toks)
+	if err != nil {
+		return nil, toks, err
+	}
 
-	case '-':
-	case '*':
-	case '/':
-	case 'g':
-	case 'l':
-	case 'E':
-	case 'N':
-	case 'G':
-	case 'L':
-	}
-	return &tOperand{Type: cOpBool, Bool: true}, nil
+	op, err := execOperator(tok.Operator, left, right)
+	return op, toks, err
 }
 
-func decodeValue(input []byte, op *tOperand) (*tOperand, error) {
-	return op, nil
+func decodeValue(input []byte, op *tOperand) error {
+	i, err := skipSpaces(input, 0)
+	if err != nil {
+		return err
+	}
+	e, err := skipValue(input, i)
+	if err != nil {
+		return err
+	}
+	if input[i] == '"' || input[i] == '{' || input[i] == '[' {
+		// string
+		op.Type = cOpString
+		op.Str = input[i:e]
+	} else if (input[i] >= '0' && input[i] <= '9') || input[i] == '-' || input[i] == '.' {
+		// number
+		f, err := strconv.ParseFloat(string(input[i:e]), 64)
+		if err != nil {
+			op.Type = cOpErr
+			return err
+		}
+		op.Type = cOpNumber
+		op.Number = f
+	} else {
+		//
+		ch := input[i]
+		if ch >= 'A' && ch <= 'Z' {
+			ch += 'a' - 'A'
+		}
+		if ch == 't' || ch == 'f' {
+			op.Type = cOpBool
+			op.Bool = ch == 't'
+		} else {
+			op.Type = cOpNull
+		}
+	}
+	return nil
+}
+
+func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
+	if op == '+' || op == '-' || op == '*' || op == '/' {
+		if left.Type != cOpNumber || right.Type != cOpNumber {
+			return nil, errors.New("invalid operands for " + string(op))
+		}
+		switch op {
+		case '+':
+			left.Number += right.Number
+		case '-':
+			left.Number -= right.Number
+		case '*':
+			left.Number *= right.Number
+		case '/':
+			left.Number /= right.Number
+		}
+		return left, nil
+	}
+	if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' {
+		if left.Type != right.Type {
+			return nil, errors.New("operand types do not match")
+		}
+		switch left.Type {
+		case cOpBool:
+			switch op {
+			case 'g':
+				left.Bool = (left.Bool && !right.Bool)
+			case 'l':
+				left.Bool = (!left.Bool && right.Bool)
+			case 'E':
+				left.Bool = (left.Bool == right.Bool)
+			case 'N':
+				left.Bool = (left.Bool != right.Bool)
+			case 'G':
+			case 'L':
+				left.Bool = right.Bool
+			}
+		case cOpNumber:
+			switch op {
+			case 'g':
+				left.Bool = left.Number > right.Number
+			case 'l':
+				left.Bool = left.Number < right.Number
+			case 'E':
+				left.Bool = left.Number == right.Number
+			case 'N':
+				left.Bool = left.Number != right.Number
+			case 'G':
+				left.Bool = left.Number >= right.Number
+			case 'L':
+				left.Bool = left.Number <= right.Number
+			}
+		case cOpString:
+			switch op {
+			case 'E':
+				left.Bool = left.Number == right.Number
+			case 'N':
+				left.Bool = left.Number != right.Number
+			default:
+				return left, errors.New("operator is not applicable to strings")
+			}
+		}
+		return left, nil
+	}
+	return left, errors.New("unknown operator")
 }

@@ -68,7 +68,7 @@ func parsePath(path []byte) (*tNode, error) {
 		return nil, errors.New("path: empty")
 	}
 	// key
-	for ; i < l && path[i] != '.' && path[i] != '[' && path[i] != '('; i++ {
+	for ; i < l && !(path[i] >= ' ' && path[i] <= '/') && path[i] != '['; i++ {
 	}
 	nod.Key = string(path[:i])
 	// type
@@ -488,11 +488,40 @@ func skipValue(input []byte, i int) (int, error) {
 		}
 		i++ // closing mark
 	} else {
-		// number, bool, null
-		for ; i < l; i++ {
-			ch := input[i]
-			if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == ',' || ch == '}' {
-				break
+		if (input[i] >= '0' && input[i] <= '9') || input[i] == '-' || input[i] == '.' {
+			// number
+			for ; i < l; i++ {
+				ch := input[i]
+				if !((ch >= '0' && ch <= '9') || ch == '.' || ch == '-' || ch == 'E' || ch == 'e') {
+					break
+				}
+			}
+		} else {
+			// bool, null
+			vals := [][]byte{[]byte("true"), []byte("false"), []byte("null")}
+			v := -1
+			p := 0
+			for ; i < l; i++ {
+				ch := input[i]
+				if ch >= 'A' && ch <= 'Z' {
+					ch += 'a' - 'A'
+				}
+				if v == -1 {
+					for iv, vv := range vals {
+						if ch == vv[0] {
+							v = iv
+						}
+					}
+					if v == -1 {
+						return i, errors.New("unexpected value")
+					}
+				} else if vals[v][p] != ch {
+					return i, errors.New("unexpected value")
+				}
+				p++
+				if p == len(vals[v]) {
+					break
+				}
 			}
 		}
 	}
