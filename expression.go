@@ -32,7 +32,7 @@ func init() {
   <string> : /"[^"]*"/
   <bool> : /(true)|(false)/
   <jsonpath> : /[@$].+/           <--- .exists
-  <operator> : /[+-/*] | (>=,<=,==,!=,>,<)/
+  <operator> : /[+-/*] | (>=,<=,==,!=,>,<) | (&&,||)/
 */
 
 type tFilter struct {
@@ -50,9 +50,9 @@ type tOperand struct {
 	Node   *tNode
 }
 
-var compares = [...]string{">", "<", "==", "!=", ">=", "<="}
-var compareOps = [...]byte{'g', 'l', 'E', 'N', 'G', 'L'}
-var precedence = map[byte]int{'g': 1, 'l': 1, 'E': 1, 'N': 1, 'G': 1, 'L': 1, '+': 2, '-': 2, '*': 3, '/': 3}
+var operator = [...]string{">", "<", "==", "!=", ">=", "<=", "&&", "||"}
+var operatorCode = [...]byte{'g', 'l', 'E', 'N', 'G', 'L', '&', '|'}
+var operatorPrecedence = map[byte]int{'&': 1, '|': 1, 'g': 2, 'l': 2, 'E': 2, 'N': 2, 'G': 2, 'L': 2, '+': 3, '-': 3, '*': 4, '/': 4}
 
 type stack struct {
 	s []*tToken
@@ -96,12 +96,14 @@ func readFilter(path []byte, i int, nod *tNode) (int, error) {
 	tokens := make([]*tToken, 0)
 	var tok *tToken
 	var err error
+	prevOperator := true
 	for i < l && path[i] != ')' {
-		i, tok, err = nextToken(path, i)
+		i, tok, err = nextToken(path, i, prevOperator)
 		if err != nil {
 			return i, err
 		}
 		if tok != nil {
+			prevOperator = tok.Operator != 0
 			tokens = append(tokens, tok)
 		}
 	}
@@ -116,7 +118,7 @@ func readFilter(path []byte, i int, nod *tNode) (int, error) {
 		} else {
 			for {
 				top := opStack.peek()
-				if top != nil && precedence[top.Operator] >= precedence[op.Operator] {
+				if top != nil && operatorPrecedence[top.Operator] >= operatorPrecedence[op.Operator] {
 					result.push(opStack.pop())
 					continue
 				}
@@ -139,7 +141,7 @@ func readFilter(path []byte, i int, nod *tNode) (int, error) {
 }
 
 // operand = (number, string, node), operator, compare
-func nextToken(path []byte, i int) (int, *tToken, error) {
+func nextToken(path []byte, i int, prevOperator bool) (int, *tToken, error) {
 	var err error
 	var tok *tToken
 	l := len(path)
@@ -152,7 +154,7 @@ func nextToken(path []byte, i int) (int, *tToken, error) {
 			return i, tok, nil
 		}
 		// number
-		if (path[i] >= '0' && path[i] <= '9') || path[i] == '-' {
+		if (path[i] >= '0' && path[i] <= '9') || (path[i] == '-' && prevOperator) {
 			return readNumber(path, i)
 		}
 		// string
@@ -182,9 +184,9 @@ func nextToken(path []byte, i int) (int, *tToken, error) {
 		if i >= l-1 {
 			return i, nil, errors.New("unexpected end of token")
 		}
-		for ic, cmp := range compares {
+		for ic, cmp := range operator {
 			if string(path[i:i+len(cmp)]) == cmp {
-				return i + len(cmp), &tToken{Operator: compareOps[ic]}, nil
+				return i + len(cmp), &tToken{Operator: operatorCode[ic]}, nil
 			}
 		}
 		return 0, nil, errors.New("unknown token " + string(path[i]))
@@ -341,7 +343,9 @@ func decodeValue(input []byte, op *tOperand) error {
 
 func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 	var res tOperand
+
 	if op == '+' || op == '-' || op == '*' || op == '/' {
+		// arithmetic
 		if left.Type != cOpNumber || right.Type != cOpNumber {
 			return nil, errors.New("invalid operands for " + string(op))
 		}
@@ -357,8 +361,8 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 			res.Number = left.Number / right.Number
 		}
 		return &res, nil
-	}
-	if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' {
+	} else if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' {
+		// comparision
 		res.Type = cOpBool
 		if left.Type == cOpNull || right.Type == cOpNull {
 			res.Bool = false
@@ -406,6 +410,37 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 			default:
 				return left, errors.New("operator is not applicable to strings")
 			}
+		}
+		return &res, nil
+	} else if op == '&' || op == '|' {
+		// logic
+		res.Type = cOpBool
+		if left.Type == cOpNull || right.Type == cOpNull {
+			res.Bool = false
+			return &res, nil
+		}
+		l := false
+		r := false
+		switch left.Type {
+		case cOpBool:
+			l = left.Bool
+		case cOpNumber:
+			l = left.Number != 0
+		case cOpString:
+			l = len(left.Str) > 0
+		}
+		switch right.Type {
+		case cOpBool:
+			r = right.Bool
+		case cOpNumber:
+			r = right.Number != 0
+		case cOpString:
+			r = len(right.Str) > 0
+		}
+		if op == '&' {
+			res.Bool = l && r
+		} else {
+			res.Bool = l || r
 		}
 		return &res, nil
 	}

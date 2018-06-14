@@ -3,10 +3,10 @@
 ## Changelog
 
 **0.5.0** (2018-06-14) -- expressions added
-> `$.store.books[?(@price > $.expensive)].title` -> `["Sword of Honour","The Lord of the Rings"]`
+> `$.store.book[?(@.price > $.expensive)].title` -> `["Sword of Honour","The Lord of the Rings"]`
 
 **0.4.0** (2018-05-16) -- aggregating sub-queries added  
-> `$.store.books[1:3].author` -> `["John","William"]`
+> `$.store.book[1:3].author` -> `["John","William"]`
 
 **0.3.0** (2018-05-05) -- beta  
 
@@ -71,7 +71,7 @@ See [jsonpath.com](http://jsonpath.com) for specs and examples
 
 2. At the moment a single index reference returns an element, not an array:  
 ```
-main sample0.json $.store.books[0]
+main sample0.json $.store.book[0]
 ```
 returns  
 ```
@@ -84,7 +84,7 @@ returns
 ```
 while this query
 ```
-main sample0.json $.store.books[0:1]
+main sample0.json $.store.book[0:1]
 ```
 returns an array 
 ```
@@ -174,8 +174,8 @@ Currently only dot notation (`$.foo.bar`) is supported.
   `./main sample0.json '$.store.book[0].title'`  
   `./main sample0.json '$.store.book[0:-1]'`  
   `./main sample1.json '$[1].author'`  
-  `./main sample0.json '$.store.books[?(@.price > 10)]'`  
-  `./main sample0.json '$.store.books[?(@.price > $.expensive)]'`  
+  `./main sample0.json '$.store.book[?(@.price > 10)]'`  
+  `./main sample0.json '$.store.book[?(@.price > $.expensive)]'`  
   
 ## Contributing
 1. Fork it!
