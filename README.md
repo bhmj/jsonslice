@@ -63,7 +63,9 @@ See [jsonpath.com](http://jsonpath.com) for specs and examples
 
 ## Limitations and deviations
 
-At the moment a single index reference returns an element, not an array:  
+1. Only single-word keys are supported (`/\w+/`)
+
+2. At the moment a single index reference returns an element, not an array:  
 ```
 main sample0.json $.store.books[0]
 ```
@@ -146,7 +148,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
   $.obj[any:any].something  -- composite sub-query
   $.obj[3,5,7]              -- multiple array indexes
 ```
-#### Filters (TODO)
+#### Filters
 ```
   @                  -- the current node
   [?(<expression>)]  -- filter expression. Applicable to arrays only
@@ -168,7 +170,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
   `./main sample0.json '$.store.book[0].title'`  
   `./main sample0.json '$.store.book[0:-1]'`  
   `./main sample1.json '$[1].author'`  
-  `./main sample0.json '$.store.books[?(@.price > 1000)]'`  
+  `./main sample0.json '$.store.books[?(@.price > 10)]'`  
   `./main sample0.json '$.store.books[?(@.price > $.expensive)]'`  
   
 ## Contributing

@@ -6,13 +6,11 @@ import (
 )
 
 const (
-	cOpErr = iota
-	cOpNumber
-	cOpString
-	cOpBool
-	cOpNull
-	cOpNode
-	cOpOperator
+	cOpNone   = 1 << iota
+	cOpNumber = 1 << iota
+	cOpString = 1 << iota
+	cOpBool   = 1 << iota
+	cOpNull   = 1 << iota
 )
 
 /*
@@ -171,10 +169,10 @@ func nextToken(path []byte, i int) (int, *tToken, error) {
 			if err != nil {
 				return 0, nil, err
 			}
-			for i < l && path[i] != ' ' && path[i] != ')' {
+			for i < l && !bytein(path[i], []byte(" \t<=>+-*/)")) {
 				i++
 			}
-			return i, &tToken{Operand: &tOperand{Type: cOpNode, Node: nod}}, nil
+			return i, &tToken{Operand: &tOperand{Type: cOpNone, Node: nod}}, nil
 		}
 		// operator
 		if path[i] == '+' || path[i] == '-' || path[i] == '*' || path[i] == '/' {
@@ -251,14 +249,14 @@ func filterMatch(input []byte, toks []*tToken) (bool, error) {
 		return false, err
 	}
 	switch op.Type {
+	case cOpNull:
+		return false, nil
 	case cOpBool:
 		return op.Bool, nil
 	case cOpNumber:
 		return op.Number > 0, nil
 	case cOpString:
 		return len(op.Str) > 0, nil
-	case cOpNode:
-		return op.Node.Exists, nil
 	default:
 		return false, nil
 	}
@@ -270,12 +268,11 @@ func evalToken(input []byte, toks []*tToken) (*tOperand, []*tToken, error) {
 	}
 	tok := toks[0]
 	if tok.Operand != nil {
-		if tok.Operand.Type == cOpNode {
+		if tok.Operand.Node != nil {
 			val, err := getValue(input, tok.Operand.Node)
 			if err != nil {
 				// not found or other error
-				tok.Operand.Type = cOpBool
-				tok.Operand.Bool = false
+				tok.Operand.Type = cOpNull
 				return tok.Operand, toks[1:], nil
 			}
 			return tok.Operand, toks[1:], decodeValue(val, tok.Operand)
@@ -312,12 +309,16 @@ func decodeValue(input []byte, op *tOperand) error {
 	if input[i] == '"' || input[i] == '{' || input[i] == '[' {
 		// string
 		op.Type = cOpString
+		if input[i] == '"' { // exclude quotes
+			i++
+			e--
+		}
 		op.Str = input[i:e]
 	} else if (input[i] >= '0' && input[i] <= '9') || input[i] == '-' || input[i] == '.' {
 		// number
 		f, err := strconv.ParseFloat(string(input[i:e]), 64)
 		if err != nil {
-			op.Type = cOpErr
+			op.Type = cOpNone
 			return err
 		}
 		op.Type = cOpNumber
@@ -358,10 +359,14 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 		return &res, nil
 	}
 	if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' {
+		res.Type = cOpBool
+		if left.Type == cOpNull || right.Type == cOpNull {
+			res.Bool = false
+			return &res, nil
+		}
 		if left.Type != right.Type {
 			return nil, errors.New("operand types do not match")
 		}
-		res.Type = cOpBool
 		switch left.Type {
 		case cOpBool:
 			switch op {
@@ -395,9 +400,9 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 		case cOpString:
 			switch op {
 			case 'E':
-				res.Bool = left.Number == right.Number
+				res.Bool = compareSlices(left.Str, right.Str) == 0
 			case 'N':
-				res.Bool = left.Number != right.Number
+				res.Bool = compareSlices(left.Str, right.Str) != 0
 			default:
 				return left, errors.New("operator is not applicable to strings")
 			}
@@ -405,4 +410,16 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 		return &res, nil
 	}
 	return &res, errors.New("unknown operator")
+}
+
+func compareSlices(s1 []byte, s2 []byte) int {
+	if len(s1) != len(s2) {
+		return len(s1) - len(s2)
+	}
+	for i := range s1 {
+		if s1[i] != s2[i] {
+			return int(s1[i] - s2[i])
+		}
+	}
+	return 0
 }

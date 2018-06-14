@@ -103,18 +103,6 @@ func TestFuzzyPath(t *testing.T) {
 	}
 }
 
-func compareSlices(s1 []byte, s2 []byte) int {
-	if len(s1) != len(s2) {
-		return len(s1) - len(s2)
-	}
-	for i := range s1 {
-		if s1[i] != s2[i] {
-			return int(s1[i] - s2[i])
-		}
-	}
-	return 0
-}
-
 func Test_SimpleCases(t *testing.T) {
 	res, err := Get(data, "$.expensive")
 	if compareSlices(res, []byte("10")) != 0 && err == nil {
@@ -156,6 +144,64 @@ func Test_10Mb(t *testing.T) {
 		t.Errorf(path + "\nexpected:\n" + string(expected) + "\ngot:\n" + string(res))
 	}
 }
+
+func Test_Expressions(t *testing.T) {
+	// simple expression
+	expected := []byte(`["Sword of Honour","The Lord of the Rings"]`)
+	query := "$.store.book[?(@.price>10)].title"
+	res, err := Get(data, query)
+	if err != nil {
+		t.Errorf(err.Error())
+	} else if compareSlices(res, expected) != 0 {
+		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
+	}
+	// +spaces
+	expected = []byte(`["Sword of Honour","The Lord of the Rings"]`)
+	query = "$.store.book[?(@.price > 10)].title"
+	res, err = Get(data, query)
+	if err != nil {
+		t.Errorf(err.Error())
+	} else if compareSlices(res, expected) != 0 {
+		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
+	}
+	// field presense
+	expected = []byte(`["Moby Dick","The Lord of the Rings"]`)
+	query = "$.store.book[?(@.isbn)].title"
+	res, err = Get(data, query)
+	if err != nil {
+		t.Errorf(err.Error())
+	} else if compareSlices(res, expected) != 0 {
+		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
+	}
+	// string match
+	expected = []byte(`["Moby Dick"]`)
+	query = `$.store.book[?(@.isbn == "0-553-21311-3")].title`
+	res, err = Get(data, query)
+	if err != nil {
+		t.Errorf(err.Error())
+	} else if compareSlices(res, expected) != 0 {
+		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
+	}
+	// string mismatch
+	expected = []byte(`["The Lord of the Rings"]`)
+	query = `$.store.book[?(@.isbn != "0-553-21311-3")].title`
+	res, err = Get(data, query)
+	if err != nil {
+		t.Errorf(err.Error())
+	} else if compareSlices(res, expected) != 0 {
+		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
+	}
+	// root references
+	expected = []byte(`["Sword of Honour","The Lord of the Rings"]`)
+	query = `$.store.book[?(@.price > $.expensive)].title`
+	res, err = Get(data, query)
+	if err != nil {
+		t.Errorf(err.Error())
+	} else if compareSlices(res, expected) != 0 {
+		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
+	}
+}
+
 func Benchmark_Unmarshal(b *testing.B) {
 	var jdata interface{}
 	for i := 0; i < b.N; i++ {

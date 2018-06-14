@@ -35,6 +35,28 @@ func Get(input []byte, path string) ([]byte, error) {
 		return nil, err
 	}
 
+	n := node
+	for {
+		n = n.Next
+		if n == nil {
+			break
+		}
+		if n.Filter != nil {
+			for _, tok := range n.Filter.toks {
+				if tok.Operand != nil && tok.Operand.Node != nil && tok.Operand.Node.Key == "$" {
+					val, err := getValue(input, tok.Operand.Node)
+					if err != nil {
+						// not found or other error
+						tok.Operand.Type = cOpBool
+						tok.Operand.Bool = false
+					}
+					decodeValue(val, tok.Operand)
+					tok.Operand.Node = nil
+				}
+			}
+		}
+	}
+
 	return getValue(input, node)
 }
 
@@ -77,7 +99,7 @@ func parsePath(path []byte) (*tNode, error) {
 		return nil, errors.New("path: empty")
 	}
 	// key
-	for ; i < l && !bytein(path[i], []byte(" \t.[(<=>+-*/")); i++ {
+	for ; i < l && !bytein(path[i], []byte(" \t.[()]<=>+-*/")); i++ {
 	}
 	nod.Key = string(path[:i])
 	// type
@@ -145,7 +167,7 @@ func parsePath(path []byte) (*tNode, error) {
 			nod.Type |= cIsTerminal
 			return nod, nil
 		}
-	} else if path[i] == ')' || path[i] == ' ' {
+	} else if bytein(path[i], []byte(" \t<=>+-*/)")) {
 		nod.Type |= cIsTerminal
 		return nod, nil
 	}
@@ -663,7 +685,7 @@ func skipString(input []byte, i int) (int, error) {
 		prev = ch
 		i++
 	}
-	if i == l {
+	if i == l && !done {
 		return 0, errors.New("unexpected end of input")
 	}
 	return i, nil
