@@ -2,9 +2,13 @@
 
 ## Changelog
 
-**0.3.0** (2018-05-05) -- beta  
+**0.5.0** (2018-06-14) -- expressions added
+> `$.store.books[@price > $.expensive].title` -> `["Sword of Honour","The Lord of the Rings"]`
+
 **0.4.0** (2018-05-16) -- aggregating sub-queries added  
 > `$.store.books[1:3].author` -> `["John","William"]`
+
+**0.3.0** (2018-05-05) -- beta  
 
 ## What is it?
 
