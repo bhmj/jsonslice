@@ -59,6 +59,15 @@ type tNode struct {
 	Exists bool
 }
 
+func bytein(b byte, seq []byte) bool {
+	for _, v := range seq {
+		if b == v {
+			return true
+		}
+	}
+	return false
+}
+
 func parsePath(path []byte) (*tNode, error) {
 	var err error
 	nod := &tNode{}
@@ -68,7 +77,7 @@ func parsePath(path []byte) (*tNode, error) {
 		return nil, errors.New("path: empty")
 	}
 	// key
-	for ; i < l && !(path[i] >= ' ' && path[i] <= '/') && path[i] != '['; i++ {
+	for ; i < l && !bytein(path[i], []byte(" \t.[(<=>+-*/")); i++ {
 	}
 	nod.Key = string(path[:i])
 	// type
@@ -96,6 +105,7 @@ func parsePath(path []byte) (*tNode, error) {
 		nod.Type = cArrayType
 		i++ // [
 		if i < l-1 && path[i] == '?' && path[i+1] == '(' {
+			nod.Type |= cArrayRanged
 			i, err = readFilter(path, i+2, nod)
 			if err != nil {
 				return nil, err
@@ -172,7 +182,7 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 	if input[0] != '{' && input[0] != '[' {
 		return nil, errors.New("object or array expected")
 	}
-	if nod.Key != "$" {
+	if nod.Key != "$" && nod.Key != "@" {
 		// find the key and seek to the value
 		input, err = getKeyValue(input, nod.Key, false)
 		if err != nil {

@@ -52,7 +52,7 @@ type tOperand struct {
 	Node   *tNode
 }
 
-var compares = [...]string{">=", "<=", "==", "!=", ">", "<"}
+var compares = [...]string{">", "<", "==", "!=", ">=", "<="}
 var compareOps = [...]byte{'g', 'l', 'E', 'N', 'G', 'L'}
 var precedence = map[byte]int{'g': 1, 'l': 1, 'E': 1, 'N': 1, 'G': 1, 'L': 1, '+': 2, '-': 2, '*': 3, '/': 3}
 
@@ -339,67 +339,70 @@ func decodeValue(input []byte, op *tOperand) error {
 }
 
 func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
+	var res tOperand
 	if op == '+' || op == '-' || op == '*' || op == '/' {
 		if left.Type != cOpNumber || right.Type != cOpNumber {
 			return nil, errors.New("invalid operands for " + string(op))
 		}
+		res.Type = left.Type
 		switch op {
 		case '+':
-			left.Number += right.Number
+			res.Number = left.Number + right.Number
 		case '-':
-			left.Number -= right.Number
+			res.Number = left.Number - right.Number
 		case '*':
-			left.Number *= right.Number
+			res.Number = left.Number * right.Number
 		case '/':
-			left.Number /= right.Number
+			res.Number = left.Number / right.Number
 		}
-		return left, nil
+		return &res, nil
 	}
 	if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' {
 		if left.Type != right.Type {
 			return nil, errors.New("operand types do not match")
 		}
+		res.Type = cOpBool
 		switch left.Type {
 		case cOpBool:
 			switch op {
 			case 'g':
-				left.Bool = (left.Bool && !right.Bool)
+				res.Bool = (left.Bool && !right.Bool)
 			case 'l':
-				left.Bool = (!left.Bool && right.Bool)
+				res.Bool = (!left.Bool && right.Bool)
 			case 'E':
-				left.Bool = (left.Bool == right.Bool)
+				res.Bool = (left.Bool == right.Bool)
 			case 'N':
-				left.Bool = (left.Bool != right.Bool)
+				res.Bool = (left.Bool != right.Bool)
 			case 'G':
 			case 'L':
-				left.Bool = right.Bool
+				res.Bool = right.Bool
 			}
 		case cOpNumber:
 			switch op {
 			case 'g':
-				left.Bool = left.Number > right.Number
+				res.Bool = left.Number > right.Number
 			case 'l':
-				left.Bool = left.Number < right.Number
+				res.Bool = left.Number < right.Number
 			case 'E':
-				left.Bool = left.Number == right.Number
+				res.Bool = left.Number == right.Number
 			case 'N':
-				left.Bool = left.Number != right.Number
+				res.Bool = left.Number != right.Number
 			case 'G':
-				left.Bool = left.Number >= right.Number
+				res.Bool = left.Number >= right.Number
 			case 'L':
-				left.Bool = left.Number <= right.Number
+				res.Bool = left.Number <= right.Number
 			}
 		case cOpString:
 			switch op {
 			case 'E':
-				left.Bool = left.Number == right.Number
+				res.Bool = left.Number == right.Number
 			case 'N':
-				left.Bool = left.Number != right.Number
+				res.Bool = left.Number != right.Number
 			default:
 				return left, errors.New("operator is not applicable to strings")
 			}
 		}
-		return left, nil
+		return &res, nil
 	}
-	return left, errors.New("unknown operator")
+	return &res, errors.New("unknown operator")
 }
