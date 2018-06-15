@@ -69,7 +69,7 @@ See [jsonpath.com](http://jsonpath.com) for specs and examples
 
 1. Only single-word keys are supported (`/\w+/`)
 
-2. At the moment a single index reference returns an element, not an array:  
+2. A single index reference returns an element, not an array:  
 ```
 main sample0.json $.store.book[0]
 ```
