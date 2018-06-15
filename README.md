@@ -2,6 +2,9 @@
 
 ## Changelog
 
+**0.5.1** (2018-06-15) -- logical expressions added
+> `$.store.book[?(@.price > $.expensive && @.isbn)].title` -> `["Moby Dick","The Lord of the Rings"]`
+
 **0.5.0** (2018-06-14) -- expressions added
 > `$.store.book[?(@.price > $.expensive)].title` -> `["Sword of Honour","The Lord of the Rings"]`
 

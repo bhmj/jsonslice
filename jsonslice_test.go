@@ -103,38 +103,6 @@ func TestFuzzyPath(t *testing.T) {
 	}
 }
 
-func Test_SimpleCases(t *testing.T) {
-	res, err := Get(data, "$.expensive")
-	if compareSlices(res, []byte("10")) != 0 && err == nil {
-		t.Errorf("expensive should be 10, but got \"" + string(res) + "\"")
-	}
-	res, err = Get(data, "$.store.book[3].author")
-	if compareSlices(res, []byte(`"J. R. R. Tolkien"`)) != 0 && err == nil {
-		t.Errorf("store.book[3].author should be \"J. R. R. Tolkien\", but got \"" + string(res) + "\"")
-	}
-}
-
-func Test_Aggregated(t *testing.T) {
-	expected := []byte(`["Evelyn Waugh","Herman Melville"]`)
-	path := "$.store.book[1:3].author"
-	res, err := Get(data, path)
-	if compareSlices(res, expected) != 0 && err == nil {
-		t.Errorf(path + "\nexpected:\n" + string(expected) + "\ngot:\n" + string(res))
-	}
-	expected = []byte(`["0-553-21311-3","0-395-19395-8"]`)
-	path = "$.store.book[1:].isbn"
-	res, err = Get(data, path)
-	if compareSlices(res, expected) != 0 && err == nil {
-		t.Errorf(path + "\nexpected:\n" + string(expected) + "\ngot:\n" + string(res))
-	}
-	expected = []byte(`["Sayings of the Century","Moby Dick"]`)
-	path = "$.store.book[0,2].title"
-	res, err = Get(data, path)
-	if compareSlices(res, expected) != 0 && err == nil {
-		t.Errorf(path + "\nexpected:\n" + string(expected) + "\ngot:\n" + string(res))
-	}
-}
-
 func Test_10Mb(t *testing.T) {
 	largeData := GenerateLargeData()
 	expected := []byte(`"Sword of Honour"`)
@@ -146,59 +114,52 @@ func Test_10Mb(t *testing.T) {
 }
 
 func Test_Expressions(t *testing.T) {
-	// simple expression
-	expected := []byte(`["Sword of Honour","The Lord of the Rings"]`)
-	query := "$.store.book[?(@.price>10)].title"
-	res, err := Get(data, query)
-	if err != nil {
-		t.Errorf(err.Error())
-	} else if compareSlices(res, expected) != 0 {
-		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
+
+	tests := []struct {
+		Query    string
+		Expected []byte
+	}{
+		// simple query
+		{`$.expensive`, []byte(`10`)},
+		// simple query
+		{`$.store.book[3].author`, []byte(`"J. R. R. Tolkien"`)},
+
+		// aggregated
+		{`$.store.book[1:3].author`, []byte(`["Evelyn Waugh","Herman Melville"]`)},
+		// aggregated, skip missing keys
+		{`$.store.book[1:].isbn`, []byte(`["0-553-21311-3","0-395-19395-8"]`)},
+		// aggregated, enumerate indexes
+		{`$.store.book[0,2].title`, []byte(`["Sayings of the Century","Moby Dick"]`)},
+
+		// simple expression
+		{`$.store.book[?(@.price>10)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
+		// simple expression
+		{`$.store.book[?(@.price==12.99)].title`, []byte(`["Sword of Honour"]`)},
+		// +spaces
+		{`$.store.book[?(@.price > 10)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
+		// field presense
+		{`$.store.book[?(@.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
+		// string match
+		{`$.store.book[?(@.isbn == "0-553-21311-3")].title`, []byte(`["Moby Dick"]`)},
+		// string mismatch
+		{`$.store.book[?(@.isbn != "0-553-21311-3")].title`, []byte(`["The Lord of the Rings"]`)},
+		// root references
+		{`$.store.book[?(@.price > $.expensive)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
+		// math
+		{`$.store.book[?(@.price > $.expensive*2)].title`, []byte(`["The Lord of the Rings"]`)},
+		// logic operators : AND
+		{`$.store.book[?(@.price > $.expensive && @.isbn)].title`, []byte(`["The Lord of the Rings"]`)},
+		// logic operators : OR
+		{`$.store.book[?(@.price >= $.expensive || @.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
 	}
-	// +spaces
-	expected = []byte(`["Sword of Honour","The Lord of the Rings"]`)
-	query = "$.store.book[?(@.price > 10)].title"
-	res, err = Get(data, query)
-	if err != nil {
-		t.Errorf(err.Error())
-	} else if compareSlices(res, expected) != 0 {
-		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
-	}
-	// field presense
-	expected = []byte(`["Moby Dick","The Lord of the Rings"]`)
-	query = "$.store.book[?(@.isbn)].title"
-	res, err = Get(data, query)
-	if err != nil {
-		t.Errorf(err.Error())
-	} else if compareSlices(res, expected) != 0 {
-		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
-	}
-	// string match
-	expected = []byte(`["Moby Dick"]`)
-	query = `$.store.book[?(@.isbn == "0-553-21311-3")].title`
-	res, err = Get(data, query)
-	if err != nil {
-		t.Errorf(err.Error())
-	} else if compareSlices(res, expected) != 0 {
-		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
-	}
-	// string mismatch
-	expected = []byte(`["The Lord of the Rings"]`)
-	query = `$.store.book[?(@.isbn != "0-553-21311-3")].title`
-	res, err = Get(data, query)
-	if err != nil {
-		t.Errorf(err.Error())
-	} else if compareSlices(res, expected) != 0 {
-		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
-	}
-	// root references
-	expected = []byte(`["Sword of Honour","The Lord of the Rings"]`)
-	query = `$.store.book[?(@.price > $.expensive)].title`
-	res, err = Get(data, query)
-	if err != nil {
-		t.Errorf(err.Error())
-	} else if compareSlices(res, expected) != 0 {
-		t.Errorf(query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(res) + "`")
+
+	for _, tst := range tests {
+		res, err := Get(data, tst.Query)
+		if err != nil {
+			t.Errorf(tst.Query + " : " + err.Error())
+		} else if compareSlices(res, tst.Expected) != 0 {
+			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(res) + "`")
+		}
 	}
 }
 

@@ -99,7 +99,7 @@ func parsePath(path []byte) (*tNode, error) {
 		return nil, errors.New("path: empty")
 	}
 	// key
-	for ; i < l && !bytein(path[i], []byte(" \t.[()]<=>+-*/")); i++ {
+	for ; i < l && !bytein(path[i], []byte(" \t.[()]<=>+-*/&|")); i++ {
 	}
 	nod.Key = string(path[:i])
 	// type
@@ -142,6 +142,7 @@ func parsePath(path []byte) (*tNode, error) {
 			nod.Left = num
 			//
 			if path[i] == ',' {
+				nod.Type |= cArrayRanged
 				nod.Elems = append(nod.Elems, num)
 				for i < l && path[i] != ']' {
 					i++
@@ -167,7 +168,7 @@ func parsePath(path []byte) (*tNode, error) {
 			nod.Type |= cIsTerminal
 			return nod, nil
 		}
-	} else if bytein(path[i], []byte(" \t<=>+-*/)")) {
+	} else if bytein(path[i], []byte(" \t<=>+-*/)&|")) {
 		nod.Type |= cIsTerminal
 		return nod, nil
 	}

@@ -50,8 +50,8 @@ type tOperand struct {
 	Node   *tNode
 }
 
-var operator = [...]string{">", "<", "==", "!=", ">=", "<=", "&&", "||"}
-var operatorCode = [...]byte{'g', 'l', 'E', 'N', 'G', 'L', '&', '|'}
+var operator = [...]string{">=", "<=", "==", "!=", ">", "<", "&&", "||"}
+var operatorCode = [...]byte{'G', 'L', 'E', 'N', 'g', 'l', '&', '|'}
 var operatorPrecedence = map[byte]int{'&': 1, '|': 1, 'g': 2, 'l': 2, 'E': 2, 'N': 2, 'G': 2, 'L': 2, '+': 3, '-': 3, '*': 4, '/': 4}
 
 type stack struct {
@@ -171,7 +171,7 @@ func nextToken(path []byte, i int, prevOperator bool) (int, *tToken, error) {
 			if err != nil {
 				return 0, nil, err
 			}
-			for i < l && !bytein(path[i], []byte(" \t<=>+-*/)")) {
+			for i < l && !bytein(path[i], []byte(" \t<=>+-*/)&|")) {
 				i++
 			}
 			return i, &tToken{Operand: &tOperand{Type: cOpNone, Node: nod}}, nil
