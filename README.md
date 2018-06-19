@@ -121,7 +121,8 @@ Currently only dot notation (`$.foo.bar`) is supported.
 ```
 #### Functions
 ```
-  $.obj.length()      -- array lengh or string length, depending on the obj type
+  $.obj.length()      -- number of elements in an array or string length, depending on the obj type
+  $.obj.count()       -- same as above
   $.obj.size()        -- object size in bytes (as is)
 ```
 #### Objects

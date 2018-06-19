@@ -112,6 +112,7 @@ func parsePath(path []byte) (*tNode, error) {
 		// function
 		switch nod.Key {
 		case "length":
+		case "count":
 		case "size":
 		default:
 			return nil, errors.New("path: unknown function " + nod.Key + "()")
@@ -612,6 +613,8 @@ func doFunc(input []byte, nod *tNode) ([]byte, error) {
 	case "size":
 		result, err = skipValue(input, 0)
 	case "length":
+		fallthrough
+	case "count":
 		if input[0] == '"' {
 			result, err = skipString(input, 0)
 		} else if input[0] == '[' {
