@@ -677,13 +677,14 @@ func skipSpaces(input []byte, i int) (int, error) {
 }
 
 func skipString(input []byte, i int) (int, error) {
-	prev := byte('"')
+	bound := input[i]
+	prev := bound
 	done := false
 	i++
 	l := len(input)
 	for i < l && !done {
 		ch := input[i]
-		if ch == '"' && prev != '\\' {
+		if ch == bound && prev != '\\' {
 			done = true
 		}
 		prev = ch

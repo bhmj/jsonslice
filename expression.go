@@ -158,7 +158,7 @@ func nextToken(path []byte, i int, prevOperator bool) (int, *tToken, error) {
 			return readNumber(path, i)
 		}
 		// string
-		if path[i] == '"' {
+		if path[i] == '"' || path[i] == '\'' {
 			return readString(path, i)
 		}
 		// bool
@@ -208,10 +208,11 @@ func readNumber(path []byte, i int) (int, *tToken, error) {
 }
 
 func readString(path []byte, i int) (int, *tToken, error) {
+	bound := path[i]
 	i++ // quote
 	s := i
 	l := len(path)
-	for i < l && path[i] != '"' {
+	for i < l && path[i] != bound {
 		if path[i] == '\\' {
 			i += 2
 			continue
@@ -308,10 +309,10 @@ func decodeValue(input []byte, op *tOperand) error {
 	if err != nil {
 		return err
 	}
-	if input[i] == '"' || input[i] == '{' || input[i] == '[' {
+	if input[i] == '"' || input[i] == '\'' || input[i] == '{' || input[i] == '[' {
 		// string
 		op.Type = cOpString
-		if input[i] == '"' { // exclude quotes
+		if input[i] == '"' || input[i] == '\'' { // exclude quotes
 			i++
 			e--
 		}
