@@ -43,12 +43,22 @@ $ go test -bench=. -benchmem -benchtime=4s
 goos: windows
 goarch: amd64
 pkg: github.com/bhmj/jsonslice
-BenchmarkPath-4        10000000      518 ns/op     336 B/op     8 allocs/op
-BenchmarkGet-4          2000000     3761 ns/op     336 B/op     8 allocs/op
-BenchmarkUnmarshal-4     300000    22457 ns/op    3568 B/op    88 allocs/op
-BenchmarkJsonpath-4     2000000     3927 ns/op     608 B/op    48 allocs/op
+// here's a couple of operations usually neede to get a jsonpath object:
+Benchmark_Unmarshal-4                   200000        23321 ns/op    3568 B/op    88 allocs/op
+Benchmark_Oliveagle_Jsonpath-4         1000000         4160 ns/op     608 B/op    48 allocs/op
+// here's a couple of operations needed to get a jsonslice:
+Benchmark_JsonSlice_ParsePath-4        5000000         1152 ns/op     432 B/op     9 allocs/op
+Benchmark_Jsonslice_Get-4              1000000         4563 ns/op     432 B/op     9 allocs/op
+// in case you need a non-contiguous elements, this may take a bit more:
+Benchmark_Jsonslice_Get_Aggregated-4   1000000         9030 ns/op    2101 B/op    19 allocs/op
+// unmarshalling a large json:
+Benchmark_Unmarshal_10Mb-4                  50    107806168 ns/op     376 B/op     5 allocs/op
+// jsonslicing the same json, target element is near:
+Benchmark_Jsonslice_Get_10Mb_First-4   2000000         2421 ns/op     432 B/op     9 allocs/op
+// jsonslicing the same json, target element is at the end:
+Benchmark_Jsonslice_Get_10Mb_Last-4        100     59093380 ns/op     432 B/op     9 allocs/op
 PASS
-ok      github.com/bhmj/jsonslice       35.874s
+ok      github.com/bhmj/jsonslice       82.348s
 ```
 
 ## Specs
