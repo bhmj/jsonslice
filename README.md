@@ -63,7 +63,8 @@ ok      github.com/bhmj/jsonslice       82.348s
 
 ## Specs
 
-See [jsonpath.com](http://jsonpath.com) for specs and examples
+See [jsonpath.com](http://jsonpath.com) for specs and examples.  
+See [Jayway JsonPath](https://github.com/json-path/JsonPath) for details on jsonpath regexp syntax.
 
 ## Limitations and deviations
 
