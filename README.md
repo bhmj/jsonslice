@@ -1,21 +1,5 @@
 # JSON Slice
 
-## Changelog
-
-**0.5.2** (2018-06-25) -- regular expressions added
-> `$.store.book[?(@.title =~ /(Dick)|(Lord)/)].title` -> `["Moby Dick","The Lord of the Rings"]`
-
-**0.5.1** (2018-06-15) -- logical expressions added
-> `$.store.book[?(@.price > $.expensive && @.isbn)].title` -> `["Moby Dick","The Lord of the Rings"]`
-
-**0.5.0** (2018-06-14) -- expressions added
-> `$.store.book[?(@.price > $.expensive)].title` -> `["Sword of Honour","The Lord of the Rings"]`
-
-**0.4.0** (2018-05-16) -- aggregating sub-queries added  
-> `$.store.book[1:3].author` -> `["John","William"]`
-
-**0.3.0** (2018-05-05) -- beta  
-
 ## What is it?
 
 JsonSlice is a Go package which allows to execute fast jsonpath queries without unmarshalling the whole data.  
@@ -201,6 +185,22 @@ Currently only dot notation (`$.foo.bar`) is supported.
   `./main sample0.json '$.store.book[?(@.price > 10)]'`  
   `./main sample0.json '$.store.book[?(@.price > $.expensive)]'`  
   
+## Changelog
+
+**0.6.0** (2018-06-25) -- regular expressions added
+> `$.store.book[?(@.title =~ /(dick)|(lord)/i)].title` -> `["Moby Dick","The Lord of the Rings"]`
+
+**0.5.1** (2018-06-15) -- logical expressions added
+> `$.store.book[?(@.price > $.expensive && @.isbn)].title` -> `["Moby Dick","The Lord of the Rings"]`
+
+**0.5.0** (2018-06-14) -- expressions added
+> `$.store.book[?(@.price > $.expensive)].title` -> `["Sword of Honour","The Lord of the Rings"]`
+
+**0.4.0** (2018-05-16) -- aggregating sub-queries added  
+> `$.store.book[1:3].author` -> `["John","William"]`
+
+**0.3.0** (2018-05-05) -- beta  
+
 ## Contributing
 1. Fork it!
 2. Create your feature branch: `git checkout -b my-new-feature`
