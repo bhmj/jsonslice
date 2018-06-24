@@ -2,6 +2,9 @@
 
 ## Changelog
 
+**0.5.2** (2018-06-25) -- regular expressions added
+> `$.store.book[?(@.title =~ /(Dick)|(Lord)/)].title` -> `["Moby Dick","The Lord of the Rings"]`
+
 **0.5.1** (2018-06-15) -- logical expressions added
 > `$.store.book[?(@.price > $.expensive && @.isbn)].title` -> `["Moby Dick","The Lord of the Rings"]`
 

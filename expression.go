@@ -2,6 +2,7 @@ package jsonslice
 
 import (
 	"errors"
+	"regexp"
 	"strconv"
 )
 
@@ -11,6 +12,7 @@ const (
 	cOpString = 1 << iota
 	cOpBool   = 1 << iota
 	cOpNull   = 1 << iota
+	cOpRegexp = 1 << iota
 )
 
 /*
@@ -48,11 +50,12 @@ type tOperand struct {
 	Bool   bool
 	Str    []byte
 	Node   *tNode
+	Regexp *regexp.Regexp
 }
 
-var operator = [...]string{">=", "<=", "==", "!=", ">", "<", "&&", "||"}
-var operatorCode = [...]byte{'G', 'L', 'E', 'N', 'g', 'l', '&', '|'}
-var operatorPrecedence = map[byte]int{'&': 1, '|': 1, 'g': 2, 'l': 2, 'E': 2, 'N': 2, 'G': 2, 'L': 2, '+': 3, '-': 3, '*': 4, '/': 4}
+var operator = [...]string{">=", "<=", "==", "!=", "=~", ">", "<", "&&", "||"}
+var operatorCode = [...]byte{'G', 'L', 'E', 'N', 'R', 'g', 'l', '&', '|'}
+var operatorPrecedence = map[byte]int{'&': 1, '|': 1, 'g': 2, 'l': 2, 'E': 2, 'N': 2, 'R': 2, 'G': 2, 'L': 2, '+': 3, '-': 3, '*': 4, '/': 4}
 
 type stack struct {
 	s []*tToken
@@ -96,14 +99,14 @@ func readFilter(path []byte, i int, nod *tNode) (int, error) {
 	tokens := make([]*tToken, 0)
 	var tok *tToken
 	var err error
-	prevOperator := true
+	prevOperator := byte('+')
 	for i < l && path[i] != ')' {
 		i, tok, err = nextToken(path, i, prevOperator)
 		if err != nil {
 			return i, err
 		}
 		if tok != nil {
-			prevOperator = tok.Operator != 0
+			prevOperator = tok.Operator
 			tokens = append(tokens, tok)
 		}
 	}
@@ -141,7 +144,7 @@ func readFilter(path []byte, i int, nod *tNode) (int, error) {
 }
 
 // operand = (number, string, node), operator, compare
-func nextToken(path []byte, i int, prevOperator bool) (int, *tToken, error) {
+func nextToken(path []byte, i int, prevOperator byte) (int, *tToken, error) {
 	var err error
 	var tok *tToken
 	l := len(path)
@@ -154,7 +157,7 @@ func nextToken(path []byte, i int, prevOperator bool) (int, *tToken, error) {
 			return i, tok, nil
 		}
 		// number
-		if (path[i] >= '0' && path[i] <= '9') || (path[i] == '-' && prevOperator) {
+		if (path[i] >= '0' && path[i] <= '9') || (path[i] == '-' && prevOperator != 0) {
 			return readNumber(path, i)
 		}
 		// string
@@ -175,6 +178,10 @@ func nextToken(path []byte, i int, prevOperator bool) (int, *tToken, error) {
 				i++
 			}
 			return i, &tToken{Operand: &tOperand{Type: cOpNone, Node: nod}}, nil
+		}
+		// regexp
+		if path[i] == '/' && prevOperator == 'R' {
+			return readRegexp(path, i)
 		}
 		// operator
 		if path[i] == '+' || path[i] == '-' || path[i] == '*' || path[i] == '/' {
@@ -240,6 +247,39 @@ func readBool(path []byte, i int) (int, *tToken, error) {
 	}
 
 	return i, &tToken{Operand: &tOperand{Type: cOpBool, Bool: path[s] == 't'}}, nil
+}
+
+func readRegexp(path []byte, i int) (int, *tToken, error) {
+	l := len(path)
+	prev := byte(0)
+	re := make([]byte, 0, 32)
+	flags := make([]byte, 0, 8)
+	i++
+	for i < l && !(path[i] == '/' && prev != '\\') {
+		prev = path[i]
+		re = append(re, prev)
+		i++
+	}
+	if i < l { // skip trailing '/'
+		i++
+	}
+	flags = append(flags, '(', '?')
+	for i < l && len(flags) < 4 && (path[i] == 'i' || path[i] == 'm' || path[i] == 's' || path[i] == 'U') {
+		flags = append(flags, path[i])
+		i++
+	}
+	flags = append(flags, ')')
+	rex := ""
+	if len(flags) > 3 {
+		rex = string(flags) + string(re)
+	} else {
+		rex = string(re)
+	}
+	reg, err := regexp.Compile(rex)
+	if err != nil {
+		return i, nil, err
+	}
+	return i, &tToken{Operand: &tOperand{Type: cOpRegexp, Regexp: reg}}, nil
 }
 
 // filterMatch
@@ -362,14 +402,18 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 			res.Number = left.Number / right.Number
 		}
 		return &res, nil
-	} else if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' {
+	} else if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' || op == 'R' {
 		// comparision
 		res.Type = cOpBool
 		if left.Type == cOpNull || right.Type == cOpNull {
 			res.Bool = false
 			return &res, nil
 		}
-		if left.Type != right.Type {
+		if op == 'R' {
+			if !(left.Type == cOpString && right.Type == cOpRegexp) {
+				return nil, errors.New("invalid operands for regexp match")
+			}
+		} else if left.Type != right.Type {
 			return nil, errors.New("operand types do not match")
 		}
 		switch left.Type {
@@ -408,6 +452,8 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 				res.Bool = compareSlices(left.Str, right.Str) == 0
 			case 'N':
 				res.Bool = compareSlices(left.Str, right.Str) != 0
+			case 'R':
+				res.Bool = right.Regexp.MatchString(string(left.Str))
 			default:
 				return left, errors.New("operator is not applicable to strings")
 			}
