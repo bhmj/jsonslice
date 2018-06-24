@@ -167,17 +167,17 @@ Currently only dot notation (`$.foo.bar`) is supported.
 
 #### Filter operators
 
-  Operator | Description
-  --- | ---
-  `==`  | Equal to<br>Use single or double quotes for string expressions.<br>`[?(@.color=='red')]` or `[?(@.color=="red")]`
-  `!=`  | Not equal to
-  `>`   | Greater than
-  `>=`  | Grater than or equal to
-  `<`   | Less than
-  `<=`  | Less than or equal to
-  `=~`  | Match a regexp<br>`[?(@.name =~ /cat.*/i]`
-  `&&`  | Logical AND
-  `||`  | Logical OR
+  |Operator | Description
+  |--- | ---
+  |`==`  | Equal to<br>Use single or double quotes for string expressions.<br>`[?(@.color=='red')]` or `[?(@.color=="red")]`
+  |`!=`  | Not equal to
+  |`>`   | Greater than
+  |`>=`  | Grater than or equal to
+  |`<`   | Less than
+  |`<=`  | Less than or equal to
+  |`=~`  | Match a regexp<br>`[?(@.name =~ /cat.*/i]`
+  |`&&`  | Logical AND
+  |`||`  | Logical OR
 
 "Having" filter:  
 `$.stores[?(@.work_time[:].time_close=="16:00:00")])].id` -- find ids of every store having at least one day with a closing time at 16:00
