@@ -72,7 +72,7 @@ See [Jayway JsonPath](https://github.com/json-path/JsonPath) for details on json
 
 2. A single index reference returns an element, not an array:  
 ```
-main sample0.json $.store.book[0]
+./jsonslice sample0.json $.store.book[0]
 ```
 returns  
 ```
@@ -85,7 +85,7 @@ returns
 ```
 while this query
 ```
-main sample0.json $.store.book[0:1]
+./jsonslice sample0.json $.store.book[0:1]
 ```
 returns an array 
 ```
@@ -99,7 +99,7 @@ returns an array
 
 Also, indexing on root node is supported (assuming json is an array and not an object):  
 ```
-main sample1.json $[0].author
+./jsonslice sample1.json $[0].author
 ```
 
 ### Notation
@@ -189,16 +189,16 @@ Currently only dot notation (`$.foo.bar`) is supported.
 
   Assuming `sample0.json` and `sample1.json` in the example directory:  
 
-  `./main sample0.json '$.store.book[0]'`  
-  `./main sample0.json '$.store.book[0].title'`  
-  `./main sample0.json '$.store.book[0:-1]'`  
-  `./main sample1.json '$[1].author'`  
-  `./main sample0.json '$.store.book[?(@.price > 10)]'`  
-  `./main sample0.json '$.store.book[?(@.price > $.expensive)]'`  
+  `./jsonslice sample0.json '$.store.book[0]'`  
+  `./jsonslice sample0.json '$.store.book[0].title'`  
+  `./jsonslice sample0.json '$.store.book[0:-1]'`  
+  `./jsonslice sample1.json '$[1].author'`  
+  `./jsonslice sample0.json '$.store.book[?(@.price > 10)]'`  
+  `./jsonslice sample0.json '$.store.book[?(@.price > $.expensive)]'`  
   
 ## Changelog
 
-**0.6.1** (2018-06-26) -- array of array indexing is now supported
+**0.6.1** (2018-06-26) -- nested array indexing is now supported
 > `$.store.bicycle.equipment[1][0]` -> `"peg leg"`
 
 **0.6.0** (2018-06-25) -- regular expressions added
