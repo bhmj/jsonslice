@@ -47,7 +47,12 @@ func init() {
 				],
 				"bicycle": {
 					"color": "red",
-					"price": 19.95
+					"price": 19.95,
+					"equipment": [
+						["paddles", "umbrella", "horn"],
+						["peg leg", "parrot", "map"],
+						["light saber", "apparel"]
+					]
 				}
 			},
 			"expensive": 10
@@ -156,6 +161,9 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.book[?(@.title =~ /the/i)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
 		// regexp
 		{`$.store.book[?(@.title =~ /(Saying)|(Lord)/)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
+
+		// array of arrays
+		{`$.store.bicycle.equipment[1][0]`, []byte(`"peg leg"`)},
 	}
 
 	for _, tst := range tests {

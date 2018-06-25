@@ -198,6 +198,9 @@ Currently only dot notation (`$.foo.bar`) is supported.
   
 ## Changelog
 
+**0.6.1** (2018-06-26) -- array of array indexing is now supported
+> `$.store.bicycle.equipment[1][0]` -> `"peg leg"`
+
 **0.6.0** (2018-06-25) -- regular expressions added
 > `$.store.book[?(@.title =~ /(dick)|(lord)/i)].title` -> `["Moby Dick","The Lord of the Rings"]`
 

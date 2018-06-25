@@ -173,13 +173,16 @@ func parsePath(path []byte) (*tNode, error) {
 		nod.Type |= cIsTerminal
 		return nod, nil
 	}
-	if nod.Type&cArrayRanged > 0 && nod.Type&cIsTerminal == 0 {
+	if nod.Type&cArrayRanged > 0 {
 		nod.Type |= cAgg
 	}
-	if path[i] != '.' && nod.Type&cIsTerminal == 0 {
-		return nil, errors.New("path: invalid element reference ('.' expected)")
+	ch := path[i]
+	if ch == '.' {
+		i++
 	}
-	i++
+	if ch != '.' && ch != '[' {
+		return nil, errors.New("path: invalid element reference")
+	}
 	next, err := parsePath(path[i:])
 	if err != nil {
 		return nil, err
@@ -206,7 +209,7 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 	if input[0] != '{' && input[0] != '[' {
 		return nil, errors.New("object or array expected")
 	}
-	if nod.Key != "$" && nod.Key != "@" {
+	if nod.Key != "$" && nod.Key != "@" && nod.Key != "" {
 		// find the key and seek to the value
 		input, err = getKeyValue(input, nod.Key, false)
 		if err != nil {
