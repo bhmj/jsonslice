@@ -142,7 +142,7 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.book[?(@.price==12.99)].title`, []byte(`["Sword of Honour"]`)},
 		// +spaces
 		{`$.store.book[?(@.price > 10)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
-		// field presense
+		// field presence
 		{`$.store.book[?(@.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
 		// string match
 		{`$.store.book[?(@.isbn == "0-553-21311-3")].title`, []byte(`["Moby Dick"]`)},

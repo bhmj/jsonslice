@@ -403,7 +403,7 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 		}
 		return &res, nil
 	} else if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' || op == 'R' {
-		// comparision
+		// comparison
 		res.Type = cOpBool
 		if left.Type == cOpNull || right.Type == cOpNull {
 			res.Bool = false
