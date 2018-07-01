@@ -17,6 +17,7 @@ func init() {
 	data = []byte(`
 		{
 			"store": {
+				"open": True, 
 				"book": [
 					{
 						"category": "reference",
@@ -60,7 +61,40 @@ func init() {
 	`)
 }
 
-func TestFuzzy(t *testing.T) {
+func TestFuzzyPath(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+	var str string
+	defer func() {
+		if v := recover(); v != nil {
+			println("'" + hex.EncodeToString([]byte(str)) + "'")
+			println("'" + str + "'")
+			panic(v)
+		}
+	}()
+	rand.Seed(time.Now().UnixNano())
+	b := make([]byte, 100)
+	top := 10000000
+	fmt.Printf("\rpath fuzzy [                    ]\rpath fuzzy [")
+	for i := 0; i < top; i++ {
+		if i%(top/20) == 1 {
+			fmt.Printf(".")
+		}
+		n, err := rand.Read(b[:rand.Int()%len(b)])
+		if err != nil {
+			t.Fatal(err)
+		}
+		str = string(b[:n])
+		parsePath([]byte(str))
+	}
+	fmt.Println()
+}
+
+func TestFuzzyGet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 	var str string
 	defer func() {
 		if v := recover(); v != nil {
@@ -72,7 +106,7 @@ func TestFuzzy(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 	b := make([]byte, 500)
 	top := 10000000
-	fmt.Printf("\r[                    ]\r[")
+	fmt.Printf("\rget fuzzy  [                    ]\rget fuzzy  [")
 	for i := 0; i < top; i++ {
 		if i%(top/20) == 1 {
 			fmt.Printf(".")
@@ -85,27 +119,6 @@ func TestFuzzy(t *testing.T) {
 		Get([]byte(str), "$.some.value")
 	}
 	fmt.Println()
-}
-
-func TestFuzzyPath(t *testing.T) {
-	var str string
-	defer func() {
-		if v := recover(); v != nil {
-			println("'" + hex.EncodeToString([]byte(str)) + "'")
-			println("'" + str + "'")
-			panic(v)
-		}
-	}()
-	rand.Seed(time.Now().UnixNano())
-	b := make([]byte, 100)
-	for i := 0; i < 10000000; i++ {
-		n, err := rand.Read(b[:rand.Int()%len(b)])
-		if err != nil {
-			t.Fatal(err)
-		}
-		str = string(b[:n])
-		parsePath([]byte(str))
-	}
 }
 
 func Test_10Mb(t *testing.T) {
@@ -124,10 +137,22 @@ func Test_Expressions(t *testing.T) {
 		Query    string
 		Expected []byte
 	}{
+		// self
+		{`$`, data},
 		// simple query
 		{`$.expensive`, []byte(`10`)},
 		// simple query
 		{`$.store.book[3].author`, []byte(`"J. R. R. Tolkien"`)},
+
+		// negative index
+		{`$.store.book[-1].author`, []byte(`"J. R. R. Tolkien"`)},
+		// negative indexes
+		{`$.store.book[-3:-2].author`, []byte(`["Evelyn Waugh"]`)},
+
+		// functions
+		{`$.store.book.length()`, []byte(`4`)},
+		{`$.store.book.count()`, []byte(`4`)},
+		{`$.store.book.size()`, []byte(`604`)},
 
 		// aggregated
 		{`$.store.book[1:3].author`, []byte(`["Evelyn Waugh","Herman Melville"]`)},
@@ -138,6 +163,8 @@ func Test_Expressions(t *testing.T) {
 
 		// simple expression
 		{`$.store.book[?(@.price>10)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
+		// simple expression
+		{`$.store.book[?(@.price < 10)].title`, []byte(`["Sayings of the Century","Moby Dick"]`)},
 		// simple expression
 		{`$.store.book[?(@.price==12.99)].title`, []byte(`["Sword of Honour"]`)},
 		// +spaces
@@ -150,12 +177,22 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.book[?(@.isbn != "0-553-21311-3")].title`, []byte(`["The Lord of the Rings"]`)},
 		// root references
 		{`$.store.book[?(@.price > $.expensive)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
-		// math
-		{`$.store.book[?(@.price > $.expensive*2)].title`, []byte(`["The Lord of the Rings"]`)},
+		// math +
+		{`$.store.book[?(@.price > $.expensive+1)].price`, []byte(`[12.99,22.99]`)},
+		// math -
+		{`$.store.book[?(@.price > $.expensive-1)].price`, []byte(`[12.99,22.99]`)},
+		// math *
+		{`$.store.book[?(@.price > $.expensive*1.1)].price`, []byte(`[12.99,22.99]`)},
+		// math /
+		{`$.store.book[?(@.price > $.expensive/0.7)].price`, []byte(`[22.99]`)},
 		// logic operators : AND
 		{`$.store.book[?(@.price > $.expensive && @.isbn)].title`, []byte(`["The Lord of the Rings"]`)},
 		// logic operators : OR
 		{`$.store.book[?(@.price >= $.expensive || @.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
+		// non-empty field
+		{`$.store.book[?(@.price)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
+		// bool value
+		{`$.store.book[?($.store.open == true)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
 
 		// regexp
 		{`$.store.book[?(@.title =~ /the/i)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
@@ -164,6 +201,8 @@ func Test_Expressions(t *testing.T) {
 
 		// array of arrays
 		{`$.store.bicycle.equipment[1][0]`, []byte(`"peg leg"`)},
+		// filter expression not found -- not an error
+		{`$.store.book[?($.store[0] > 0)]`, []byte(`[]`)},
 	}
 
 	for _, tst := range tests {
@@ -172,6 +211,83 @@ func Test_Expressions(t *testing.T) {
 			t.Errorf(tst.Query + " : " + err.Error())
 		} else if compareSlices(res, tst.Expected) != 0 {
 			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(res) + "`")
+		}
+	}
+}
+
+func Test_Errors(t *testing.T) {
+
+	tests := []struct {
+		Data     []byte
+		Query    string
+		Expected string
+	}{
+		// normally only . and [ expected after the key
+		{data, `$.store(foo`, `path: invalid element reference`},
+		// unexpected EOF before :
+		{[]byte(`{"foo"  `), `$.foo`, `unexpected end of input`},
+		// unexpected EOF after :
+		{[]byte(`{"foo" : `), `$.foo`, `unexpected end of input`},
+		// wrong type
+		{[]byte(`{"foo" : "bar"`), `$.foo[0]`, `array expected at foo`},
+		// wrong type
+		{[]byte(`{"foo" : "bar"`), `$.foo[0].bar`, `array expected at foo`},
+		// wrong type
+		{[]byte(`{"foo" : "bar"`), `$.foo.bar`, `object expected at foo`},
+		// wrong type
+		{[]byte(`["foo" : ("bar")]`), `$.foo.bar`, `object expected at $`},
+
+		// start with $
+		{data, `foo`, `path: $ expected`},
+		// empty
+		{data, ``, `path: empty`},
+		// unexpected end
+		{data, `$.`, `path: unexpected end of path`},
+		// bad function
+		{data, `$.foo()`, `path: unknown function foo()`},
+
+		// array: index bound missing
+		{data, `$.store.book[1`, `path: index bound missing`},
+		// array: path: 0 as a second bound does not make sense
+		{data, `$.store.book[1:0`, `path: 0 as a second bound does not make sense`},
+		// array: index bound missing (2nd)
+		{data, `$.store.book[1:3`, `path: index bound missing`},
+		// array: node does not exist
+		{data, `$.store.book[99]`, `specified element not found`},
+		// array: node does not exist
+		{data, `$.store.book[-99]`, `specified element not found`},
+		// array: node does not exist
+		{data, `$.store.book[-99:-15]`, `specified element not found`},
+
+		// empty filter
+		{data, `$.store.book[?()]`, `empty filter`},
+		// empty filter
+		{data, `$.store.book[?(1+)]`, `not enough arguments`},
+
+		// wrong bool value
+		{[]byte(`{"foo": Troo}`), `$.foo`, `unrecognized value`},
+		// wrong value
+		{[]byte(`{"foo": moo}`), `$.foo`, `unrecognized value`},
+		// unexpected EOF
+		{[]byte(`{"foo": { "bar": "bazz"`), `$.bar`, `unexpected end of input`},
+		// unexpected EOF
+		{[]byte(`{"foo": { "bar": 0`), `$.foo.bar`, `unexpected end of input`},
+		// unexpected EOF
+		{[]byte(`{"foo": {"bar":"moo`), `$.foo.moo`, `unexpected end of input`},
+
+		// unexpected EOF
+		{[]byte(`{"foo" - { "bar": 0 }}`), `$.foo.bar`, `':' expected`},
+
+		// invalid string operator
+		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar > "zzz")]`, `operator is not applicable to strings`},
+	}
+
+	for _, tst := range tests {
+		_, err := Get(tst.Data, tst.Query)
+		if err == nil {
+			t.Errorf(tst.Query + " : error expected")
+		} else if err.Error() != tst.Expected {
+			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(err.Error()) + "`")
 		}
 	}
 }

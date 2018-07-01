@@ -166,7 +166,7 @@ func nextToken(path []byte, i int, prevOperator byte) (int, *tToken, error) {
 		}
 		// bool
 		if path[i] == 't' || path[i] == 'f' {
-			return readString(path, i)
+			return readBool(path, i)
 		}
 		// jsonpath node
 		if path[i] == '@' || path[i] == '$' {
@@ -285,7 +285,7 @@ func readRegexp(path []byte, i int) (int, *tToken, error) {
 // filterMatch
 func filterMatch(input []byte, toks []*tToken) (bool, error) {
 	if len(toks) == 0 {
-		return false, errors.New("invalid filter")
+		return false, errors.New("empty filter")
 	}
 	op, _, err := evalToken(input, toks)
 	if err != nil {

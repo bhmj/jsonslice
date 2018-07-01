@@ -22,6 +22,10 @@ func init() {
 // Get the jsonpath subset of the input
 func Get(input []byte, path string) ([]byte, error) {
 
+	if len(path) == 0 {
+		return nil, errors.New("path: empty")
+	}
+
 	if string(path) == `$` {
 		return input, nil
 	}
@@ -47,8 +51,7 @@ func Get(input []byte, path string) ([]byte, error) {
 					val, err := getValue(input, tok.Operand.Node)
 					if err != nil {
 						// not found or other error
-						tok.Operand.Type = cOpBool
-						tok.Operand.Bool = false
+						tok.Operand.Type = cOpNull
 					}
 					decodeValue(val, tok.Operand)
 					tok.Operand.Node = nil
@@ -96,7 +99,7 @@ func parsePath(path []byte) (*tNode, error) {
 	i := 0
 	l := len(path)
 	if l == 0 {
-		return nil, errors.New("path: empty")
+		return nil, errors.New("path: unexpected end of path")
 	}
 	// key
 	for ; i < l && !bytein(path[i], []byte(" \t.[()]<=>+-*/&|")); i++ {
@@ -128,7 +131,7 @@ func parsePath(path []byte) (*tNode, error) {
 		nod.Type = cArrayType
 		i++ // [
 		if i < l-1 && path[i] == '?' && path[i+1] == '(' {
-			nod.Type |= cArrayRanged
+			nod.Type |= cArrayRanged | cAgg
 			i, err = readFilter(path, i+2, nod)
 			if err != nil {
 				return nil, err
@@ -143,7 +146,7 @@ func parsePath(path []byte) (*tNode, error) {
 			nod.Left = num
 			//
 			if path[i] == ',' {
-				nod.Type |= cArrayRanged
+				nod.Type |= cArrayRanged | cAgg
 				nod.Elems = append(nod.Elems, num)
 				for i < l && path[i] != ']' {
 					i++
@@ -151,7 +154,7 @@ func parsePath(path []byte) (*tNode, error) {
 					nod.Elems = append(nod.Elems, num)
 				}
 			} else if path[i] == ':' {
-				nod.Type |= cArrayRanged
+				nod.Type |= cArrayRanged | cAgg
 				i++
 				num, ii := readInt(path, i)
 				if num == 0 && ii > i {
@@ -169,14 +172,12 @@ func parsePath(path []byte) (*tNode, error) {
 			nod.Type |= cIsTerminal
 			return nod, nil
 		}
-	} else if bytein(path[i], []byte(" \t<=>+-*/)&|")) {
+	}
+	ch := path[i]
+	if bytein(ch, []byte(" \t<=>+-*/)&|")) {
 		nod.Type |= cIsTerminal
 		return nod, nil
 	}
-	if nod.Type&cArrayRanged > 0 {
-		nod.Type |= cAgg
-	}
-	ch := path[i]
 	if ch == '.' {
 		i++
 	}
@@ -211,7 +212,7 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 	}
 	if nod.Key != "$" && nod.Key != "@" && nod.Key != "" {
 		// find the key and seek to the value
-		input, err = getKeyValue(input, nod.Key, false)
+		input, err = getKeyValue(input, nod.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -294,13 +295,9 @@ const keyOpen = 2
 const keyClose = 4
 
 // getKeyValue: find the key and seek to the value. Cut value if needed
-func getKeyValue(input []byte, key string, cut bool) ([]byte, error) {
+func getKeyValue(input []byte, key string) ([]byte, error) {
 	var err error
 	var ch byte
-	if input[0] != '{' {
-		return nil, errors.New("object expected")
-	}
-
 	i := 1
 	e := 0
 	l := len(input)
@@ -329,13 +326,6 @@ func getKeyValue(input []byte, key string, cut bool) ([]byte, error) {
 				return nil, err
 			}
 			if key == string(k) {
-				if cut {
-					e, err = skipValue(input, i)
-					if err != nil {
-						return nil, err
-					}
-					return input[i:e], nil
-				}
 				return input[i:], nil
 			}
 			e, err = skipValue(input, i)
@@ -360,7 +350,7 @@ type tElem struct {
 func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 	l := len(input)
 	if input[0] != '[' {
-		return nil, errors.New("array not found at " + nod.Key)
+		return nil, errors.New("array expected at " + nod.Key)
 	}
 	i := 1 // skip '['
 	// select by positive index -- easiest case
@@ -428,7 +418,7 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 		a := nod.Left
 		a += len(elems) // nod.Left is negative, so corrent it to a real element index
 		if a < 0 || a >= len(elems) {
-			return nil, errors.New(nod.Key + "[" + strconv.Itoa(nod.Left) + "] does not exist")
+			return nil, errors.New("specified element not found")
 		}
 		return input[elems[a].start:elems[a].end], nil
 	}
@@ -446,25 +436,11 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 	}
 	b-- // right bound excluded
 	if a < 0 || a >= len(elems) || b < 0 || b >= len(elems) {
-		return nil, errors.New(nod.Key + "[" + strconv.Itoa(nod.Left) + ":" + strconv.Itoa(nod.Right) + "] does not exist")
+		return nil, errors.New("specified element not found")
 	}
 	input = input[elems[a].start:elems[b].end]
 	input = input[:len(input):len(input)]
 	return append([]byte{'['}, append(input, ']')...), nil
-}
-
-// sliceValue: slice a single value
-func sliceValue(input []byte) ([]byte, error) {
-	eoe, err := skipValue(input, 0)
-	if err != nil {
-		return nil, err
-	}
-	return input[:eoe], nil
-}
-
-// getValues: get (sub-)values from array
-func getValues(input []byte, nod *tNode) ([]byte, error) {
-	return nil, errors.New("not yet supported")
 }
 
 func seekToValue(input []byte, i int) (int, error) {
@@ -475,7 +451,7 @@ func seekToValue(input []byte, i int) (int, error) {
 		return 0, err
 	}
 	if input[i] != ':' {
-		return 0, errors.New("\":\" expected")
+		return 0, errors.New("':' expected")
 	}
 	i++ // colon
 	return skipSpaces(input, i)
@@ -550,10 +526,10 @@ func skipValue(input []byte, i int) (int, error) {
 						}
 					}
 					if v == -1 {
-						return i, errors.New("unexpected value")
+						return i, errors.New("unrecognized value")
 					}
 				} else if vals[v][p] != ch {
-					return i, errors.New("unexpected value")
+					return i, errors.New("unrecognized value")
 				}
 				p++
 				if p == len(vals[v]) {
@@ -572,41 +548,25 @@ func checkValueType(input []byte, nod *tNode) error {
 	if nod.Type&cSubject > 0 {
 		return nil
 	}
+	if nod.Type&cIsTerminal > 0 {
+		return nil
+	}
 	ch := input[0]
-	if ch == '[' && nod.Type&cArrayType == 0 && nod.Type&cIsTerminal == 0 {
+	if nod.Type&cArrayType == 0 && ch != '{' {
 		return errors.New("object expected at " + nod.Key)
-	} else if ch == '{' && nod.Type&cArrayType > 0 {
+	} else if nod.Type&cArrayType > 0 && ch != '[' {
 		return errors.New("array expected at " + nod.Key)
-	} else if ch != '{' && ch != '[' && nod.Type&cIsTerminal == 0 {
-		return errors.New("complex type expected at " + nod.Key)
 	}
-	return nil
-}
-
-// get input and current value position
-// return next key and new value position
-
-func nextKey(input []byte, i int) ([]byte, int) {
-	status := keySeek
-	key := make([]byte, 0, 32)
-	for l := len(input); i < l; i++ {
-		ch := input[i]
-		switch {
-		case status&keyOpen > 0:
-			if ch == '"' {
-				status -= keyOpen
-				status |= keyClose
-			} else {
-				key = append(key, ch)
-			}
-		case status&keySeek > 0 && ch == '"':
-			status -= keySeek
-			status |= keyOpen
-		case status&keyClose > 0 && ch == ':':
-			return key, i + 1
+	/*
+		if ch == '[' && nod.Type&cArrayType == 0 && nod.Type&cIsTerminal == 0 {
+			return errors.New("object expected at " + nod.Key)
+		} else if ch == '{' && nod.Type&cArrayType > 0 {
+			return errors.New("array expected at " + nod.Key)
+		} else if ch != '{' && ch != '[' && nod.Type&cIsTerminal == 0 {
+			return errors.New("object or array expected at " + nod.Key)
 		}
-	}
-	return nil, i
+	*/
+	return nil
 }
 
 func doFunc(input []byte, nod *tNode) ([]byte, error) {
