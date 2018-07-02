@@ -474,32 +474,7 @@ func skipValue(input []byte, i int) (int, error) {
 		return skipString(input, i)
 	} else if input[i] == '{' || input[i] == '[' {
 		// object or array
-		mark := input[i]
-		unmark := mark + 2
-		nested := 0
-		instr := false
-		prev := mark
-		i++
-		for i < l && !(input[i] == unmark && nested == 0) {
-			ch := input[i]
-			if ch == '"' {
-				if prev != '\\' {
-					instr = !instr
-				}
-			} else if !instr {
-				if ch == mark {
-					nested++
-				} else if ch == unmark {
-					nested--
-				}
-			}
-			prev = ch
-			i++
-		}
-		if i == l {
-			return 0, errors.New("unexpected end of input")
-		}
-		i++ // closing mark
+		return skipObject(input, i)
 	} else {
 		if (input[i] >= '0' && input[i] <= '9') || input[i] == '-' || input[i] == '.' {
 			// number
@@ -656,5 +631,36 @@ func skipString(input []byte, i int) (int, error) {
 	if i == l && !done {
 		return 0, errors.New("unexpected end of input")
 	}
+	return i, nil
+}
+
+func skipObject(input []byte, i int) (int, error) {
+	l := len(input)
+	mark := input[i]
+	unmark := mark + 2 // ] or }
+	nested := 0
+	instr := false
+	prev := mark
+	i++
+	for i < l && !(input[i] == unmark && nested == 0) {
+		ch := input[i]
+		if ch == '"' {
+			if prev != '\\' {
+				instr = !instr
+			}
+		} else if !instr {
+			if ch == mark {
+				nested++
+			} else if ch == unmark {
+				nested--
+			}
+		}
+		prev = ch
+		i++
+	}
+	if i == l {
+		return 0, errors.New("unexpected end of input")
+	}
+	i++ // closing mark
 	return i, nil
 }

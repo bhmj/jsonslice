@@ -216,14 +216,18 @@ func readNumber(path []byte, i int) (int, *tToken, error) {
 
 func readString(path []byte, i int) (int, *tToken, error) {
 	bound := path[i]
+	prev := bound
 	i++ // quote
 	s := i
 	l := len(path)
-	for i < l && path[i] != bound {
-		if path[i] == '\\' {
-			i += 2
-			continue
+	for i < l {
+		ch := path[i]
+		if ch == bound {
+			if prev != '\\' {
+				break
+			}
 		}
+		prev = ch
 		i++
 	}
 	if i == l {

@@ -3,3 +3,4 @@ debug
 *.exe
 *.prof
 *.test
+coverage.out

@@ -52,7 +52,8 @@ func init() {
 					"equipment": [
 						["paddles", "umbrella", "horn"],
 						["peg leg", "parrot", "map"],
-						["light saber", "apparel"]
+						["light saber", "apparel"],
+						["\"quoted\""]
 					]
 				}
 			},
@@ -189,10 +190,22 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.book[?(@.price > $.expensive && @.isbn)].title`, []byte(`["The Lord of the Rings"]`)},
 		// logic operators : OR
 		{`$.store.book[?(@.price >= $.expensive || @.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
+		// logic operators : AND/OR numbers, strings
+		{`$.store.book[?(@.price || @.isbn != "")].title`, []byte(`["Sayings of the Century","Sword of Honour","Moby Dick","The Lord of the Rings"]`)},
+		// logic operators : same as above, for coverage's sake
+		{`$.store.book[?(@.isbn != "" || @.price)].title`, []byte(`["Sayings of the Century","Sword of Honour","Moby Dick","The Lord of the Rings"]`)},
 		// non-empty field
 		{`$.store.book[?(@.price)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
 		// bool value
 		{`$.store.book[?($.store.open == true)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
+		// bool value
+		{`$.store.book[?($.store.open != false)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
+		// bool value
+		{`$.store.book[?($.store.open > false)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
+		// bool value
+		{`$.store.book[?($.store.open < true)].price`, []byte(``)},
+		// escaped chars
+		{`$.store.bicycle.equipment[?(@[0] == "\"quoted\"")]`, []byte(`[["\"quoted\""]]`)},
 
 		// regexp
 		{`$.store.book[?(@.title =~ /the/i)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
@@ -280,6 +293,8 @@ func Test_Errors(t *testing.T) {
 
 		// invalid string operator
 		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar > "zzz")]`, `operator is not applicable to strings`},
+		// unknown token
+		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar == 2^3)]`, `unknown token ^`},
 	}
 
 	for _, tst := range tests {
