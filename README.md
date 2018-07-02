@@ -1,3 +1,5 @@
+[![Go Report Card](https://goreportcard.com/badge/github.com/bhmj/jsonslice)](https://goreportcard.com/report/github.com/bhmj/jsonslice)
+
 # JSON Slice
 
 ## What is it?
