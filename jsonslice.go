@@ -143,8 +143,7 @@ func parsePath(path []byte) (*tNode, error) {
 	}
 	if ch == '.' {
 		i++
-	}
-	if ch != '.' && ch != '[' {
+	} else if ch != '[' { // nested array
 		return nil, errors.New("path: invalid element reference")
 	}
 	next, err := parsePath(path[i:])
@@ -155,7 +154,6 @@ func parsePath(path []byte) (*tNode, error) {
 	if next.Type&cFunction > 0 {
 		nod.Type |= cSubject
 	}
-
 	return nod, nil
 }
 
@@ -366,45 +364,22 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 		return nil, errors.New("array expected at " + nod.Key)
 	}
 	i := 1 // skip '['
-	// select by positive index -- easiest case
+
 	if nod.Type&cArrayRanged == 0 && nod.Left >= 0 && len(nod.Elems) == 0 {
-		ielem := 0
-		for i < l && input[i] != ']' {
-			e, err := skipValue(input, i)
-			if err != nil {
-				return nil, err
-			}
-			if ielem == nod.Left {
-				return input[i:e], nil
-			}
-			// skip spaces after value
-			i, err = skipSpaces(input, e)
-			if err != nil {
-				return nil, err
-			}
-			ielem++
-		}
-		return nil, errors.New("specified element not found")
+		// single positive index -- easiest case
+		return getArrayElement(input, i, nod)
 	}
+	if nod.Filter != nil {
+		// filtered array
+		return getFilteredElements(input, i, nod)
+	}
+
 	elems := make([]tElem, 0, 32)
-	result := []byte{'['}
 	// fullscan
 	for i < l && input[i] != ']' {
 		e, err := skipValue(input, i)
 		if err != nil {
 			return nil, err
-		}
-		if nod.Filter != nil {
-			b, err := filterMatch(input[i:e], nod.Filter.toks)
-			if err != nil {
-				return nil, err
-			}
-			if b {
-				if len(result) > 2 {
-					result = append(result, ',')
-				}
-				result = append(result, input[i:e]...)
-			}
 		}
 		elems = append(elems, tElem{i, e})
 		// skip spaces after value
@@ -412,9 +387,6 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-	}
-	if nod.Filter != nil {
-		return append(result, ']'), nil
 	}
 	if len(nod.Elems) > 0 {
 		result := []byte{'['}
@@ -428,32 +400,88 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 	}
 	//   select by index(es)
 	if nod.Type&cArrayRanged == 0 {
-		a := nod.Left
-		a += len(elems) // nod.Left is negative, so corrent it to a real element index
-		if a < 0 || a >= len(elems) {
+		a := nod.Left + len(elems) // nod.Left is negative, so corrent it to a real element index
+		if a < 0 {
 			return nil, errors.New("specified element not found")
 		}
 		return input[elems[a].start:elems[a].end], nil
 	}
 	// two bounds
-	a := nod.Left
-	b := nod.Right
-	if b == 0 {
-		b = len(elems)
-	}
-	if a < 0 {
-		a += len(elems)
-	}
-	if b < 0 {
-		b += len(elems)
-	}
-	b-- // right bound excluded
-	if a < 0 || a >= len(elems) || b < 0 || b >= len(elems) {
-		return nil, errors.New("specified element not found")
+	a, b, err := adjustBounds(nod.Left, nod.Right, len(elems))
+	if err != nil {
+		return nil, err
 	}
 	input = input[elems[a].start:elems[b].end]
 	input = input[:len(input):len(input)]
 	return append([]byte{'['}, append(input, ']')...), nil
+}
+
+func getArrayElement(input []byte, i int, nod *tNode) ([]byte, error) {
+	l := len(input)
+	ielem := 0
+	for i < l && input[i] != ']' {
+		e, err := skipValue(input, i)
+		if err != nil {
+			return nil, err
+		}
+		if ielem == nod.Left {
+			return input[i:e], nil
+		}
+		// skip spaces after value
+		i, err = skipSpaces(input, e)
+		if err != nil {
+			return nil, err
+		}
+		ielem++
+	}
+	return nil, errors.New("specified element not found")
+}
+
+func getFilteredElements(input []byte, i int, nod *tNode) ([]byte, error) {
+	l := len(input)
+	result := []byte{'['}
+	// fullscan
+	for i < l && input[i] != ']' {
+		e, err := skipValue(input, i)
+		if err != nil {
+			return nil, err
+		}
+		b, err := filterMatch(input[i:e], nod.Filter.toks)
+		if err != nil {
+			return nil, err
+		}
+		if b {
+			if len(result) > 2 {
+				result = append(result, ',')
+			}
+			result = append(result, input[i:e]...)
+		}
+		// skip spaces after value
+		i, err = skipSpaces(input, e)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return append(result, ']'), nil
+}
+
+func adjustBounds(left int, right int, n int) (int, int, error) {
+	a := left
+	b := right
+	if b == 0 {
+		b = n
+	}
+	if a < 0 {
+		a += n
+	}
+	if b < 0 {
+		b += n
+	}
+	b-- // right bound excluded
+	if a < 0 || a >= n || b < 0 || b >= n {
+		return 0, 0, errors.New("specified element not found")
+	}
+	return a, b, nil
 }
 
 func seekToValue(input []byte, i int) (int, error) {
@@ -491,39 +519,54 @@ func skipValue(input []byte, i int) (int, error) {
 	} else {
 		if (input[i] >= '0' && input[i] <= '9') || input[i] == '-' || input[i] == '.' {
 			// number
-			for ; i < l; i++ {
-				ch := input[i]
-				if !((ch >= '0' && ch <= '9') || ch == '.' || ch == '-' || ch == 'E' || ch == 'e') {
-					break
-				}
-			}
+			i = skipNumber(input, i)
 		} else {
 			// bool, null
-			vals := [][]byte{[]byte("true"), []byte("false"), []byte("null")}
-			v := -1
-			p := 0
-			for ; i < l; i++ {
-				ch := input[i]
-				if ch >= 'A' && ch <= 'Z' {
-					ch += 'a' - 'A'
-				}
-				if v == -1 {
-					for iv, vv := range vals {
-						if ch == vv[0] {
-							v = iv
-						}
-					}
-					if v == -1 {
-						return i, errors.New("unrecognized value")
-					}
-				} else if vals[v][p] != ch {
-					return i, errors.New("unrecognized value")
-				}
-				p++
-				if p == len(vals[v]) {
-					break
+			i, err = skipBoolNull(input, i)
+			if err != nil {
+				return i, err
+			}
+		}
+	}
+	return i, nil
+}
+
+func skipNumber(input []byte, i int) int {
+	l := len(input)
+	for ; i < l; i++ {
+		ch := input[i]
+		if !((ch >= '0' && ch <= '9') || ch == '.' || ch == '-' || ch == 'E' || ch == 'e') {
+			break
+		}
+	}
+	return i
+}
+
+func skipBoolNull(input []byte, i int) (int, error) {
+	l := len(input)
+	vals := [][]byte{[]byte("true"), []byte("false"), []byte("null")}
+	v := -1
+	p := 0
+	for ; i < l; i++ {
+		ch := input[i]
+		if ch >= 'A' && ch <= 'Z' {
+			ch += 'a' - 'A'
+		}
+		if v == -1 {
+			for iv, vv := range vals {
+				if ch == vv[0] {
+					v = iv
 				}
 			}
+			if v == -1 {
+				return i, errors.New("unrecognized value")
+			}
+		} else if vals[v][p] != ch {
+			return i, errors.New("unrecognized value")
+		}
+		p++
+		if p == len(vals[v]) {
+			break
 		}
 	}
 	return i, nil
@@ -616,13 +659,12 @@ func readInt(path []byte, i int) (int, int) {
 func skipSpaces(input []byte, i int) (int, error) {
 	l := len(input)
 	for ; i < l; i++ {
-		ch := input[i]
-		if !(ch == ',' || ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
+		if !bytein(input[i], []byte(" ,\t\r\n")) {
 			break
 		}
 	}
 	if i == l {
-		return 0, errors.New("unexpected end of input")
+		return i, errors.New("unexpected end of input")
 	}
 	return i, nil
 }
