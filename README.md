@@ -200,22 +200,24 @@ Currently only dot notation (`$.foo.bar`) is supported.
   
 ## Changelog
 
-**0.6.1** (2018-06-26) -- nested array indexing is now supported
+**0.6.2** (2018-07-03) -- More tests added, error handling clarified.
+
+**0.6.1** (2018-06-26) -- Nested array indexing is now supported.
 > `$.store.bicycle.equipment[1][0]` -> `"peg leg"`
 
-**0.6.0** (2018-06-25) -- regular expressions added
+**0.6.0** (2018-06-25) -- Regular expressions added.
 > `$.store.book[?(@.title =~ /(dick)|(lord)/i)].title` -> `["Moby Dick","The Lord of the Rings"]`
 
-**0.5.1** (2018-06-15) -- logical expressions added
+**0.5.1** (2018-06-15) -- Logical expressions added.
 > `$.store.book[?(@.price > $.expensive && @.isbn)].title` -> `["The Lord of the Rings"]`
 
-**0.5.0** (2018-06-14) -- expressions added
+**0.5.0** (2018-06-14) -- Expressions added.
 > `$.store.book[?(@.price > $.expensive)].title` -> `["Sword of Honour","The Lord of the Rings"]`
 
-**0.4.0** (2018-05-16) -- aggregating sub-queries added  
+**0.4.0** (2018-05-16) -- Aggregating sub-queries added.
 > `$.store.book[1:3].author` -> `["John","William"]`
 
-**0.3.0** (2018-05-05) -- beta  
+**0.3.0** (2018-05-05) -- Beta  
 
 ## Contributing
 1. Fork it!
