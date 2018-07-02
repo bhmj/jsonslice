@@ -17,7 +17,7 @@ func init() {
 	data = []byte(`
 		{
 			"store": {
-				"open": True, 
+				"open": true, 
 				"book": [
 					{
 						"category": "reference",
@@ -317,7 +317,11 @@ func Benchmark_Unmarshal(b *testing.B) {
 func Benchmark_Oliveagle_Jsonpath(b *testing.B) {
 	b.StopTimer()
 	var jdata interface{}
-	json.Unmarshal(data, &jdata)
+	err := json.Unmarshal(data, &jdata)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = jsonpath.JsonPathLookup(jdata, "$.store.book[3].title")

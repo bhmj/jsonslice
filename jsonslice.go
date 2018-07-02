@@ -128,48 +128,11 @@ func parsePath(path []byte) (*tNode, error) {
 		}
 	} else if path[i] == '[' {
 		// array
-		nod.Type = cArrayType
-		i++ // [
-		if i < l-1 && path[i] == '?' && path[i+1] == '(' {
-			nod.Type |= cArrayRanged | cAgg
-			i, err = readFilter(path, i+2, nod)
-			if err != nil {
-				return nil, err
-			}
-			i++ // )
-		} else {
-			num := 0
-			num, i = readInt(path, i)
-			if i == l || (path[i] != ':' && path[i] != ']' && path[i] != ',') {
-				return nil, errors.New("path: index bound missing")
-			}
-			nod.Left = num
-			//
-			if path[i] == ',' {
-				nod.Type |= cArrayRanged | cAgg
-				nod.Elems = append(nod.Elems, num)
-				for i < l && path[i] != ']' {
-					i++
-					num, i = readInt(path, i)
-					nod.Elems = append(nod.Elems, num)
-				}
-			} else if path[i] == ':' {
-				nod.Type |= cArrayRanged | cAgg
-				i++
-				num, ii := readInt(path, i)
-				if num == 0 && ii > i {
-					return nil, errors.New("path: 0 as a second bound does not make sense")
-				}
-				if ii == l || path[ii] != ']' {
-					return nil, errors.New("path: index bound missing")
-				}
-				i = ii
-				nod.Right = num
-			}
+		i, err = parseArrayIndex(path, i, nod)
+		if err != nil {
+			return nod, err
 		}
-		i++ // ]
-		if i >= l {
-			nod.Type |= cIsTerminal
+		if nod.Type&cIsTerminal > 0 {
 			return nod, nil
 		}
 	}
@@ -194,6 +157,55 @@ func parsePath(path []byte) (*tNode, error) {
 	}
 
 	return nod, nil
+}
+
+func parseArrayIndex(path []byte, i int, nod *tNode) (int, error) {
+	nod.Type = cArrayType
+	l := len(path)
+	var err error
+	i++ // [
+	if i < l-1 && path[i] == '?' && path[i+1] == '(' {
+		nod.Type |= cArrayRanged | cAgg
+		i, err = readFilter(path, i+2, nod)
+		if err != nil {
+			return i, err
+		}
+		i++ // )
+	} else {
+		num := 0
+		num, i = readInt(path, i)
+		if i == l || (path[i] != ':' && path[i] != ']' && path[i] != ',') {
+			return i, errors.New("path: index bound missing")
+		}
+		nod.Left = num
+		//
+		if path[i] == ',' {
+			nod.Type |= cArrayRanged | cAgg
+			nod.Elems = append(nod.Elems, num)
+			for i < l && path[i] != ']' {
+				i++
+				num, i = readInt(path, i)
+				nod.Elems = append(nod.Elems, num)
+			}
+		} else if path[i] == ':' {
+			nod.Type |= cArrayRanged | cAgg
+			i++
+			num, ii := readInt(path, i)
+			if num == 0 && ii > i {
+				return i, errors.New("path: 0 as a second bound does not make sense")
+			}
+			if ii == l || path[ii] != ']' {
+				return i, errors.New("path: index bound missing")
+			}
+			i = ii
+			nod.Right = num
+		}
+	}
+	i++ // ]
+	if i >= l {
+		nod.Type |= cIsTerminal
+	}
+	return i, nil
 }
 
 func getValue(input []byte, nod *tNode) (result []byte, err error) {
