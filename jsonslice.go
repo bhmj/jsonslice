@@ -95,57 +95,30 @@ func bytein(b byte, seq []byte) bool {
 
 func parsePath(path []byte) (*tNode, error) {
 	var err error
+	var done bool
 	nod := &tNode{}
 	i := 0
 	l := len(path)
+
 	if l == 0 {
 		return nil, errors.New("path: unexpected end of path")
 	}
-	// key
+	// get key
 	for ; i < l && !bytein(path[i], []byte(" \t.[()]<=>+-*/&|")); i++ {
 	}
 	nod.Key = string(path[:i])
-	// type
+
 	if i == l {
+		// finished parsing
 		nod.Type |= cIsTerminal
 		return nod, nil
 	}
 
-	if path[i] == '(' && i < l-1 && path[i+1] == ')' {
-		// function
-		switch nod.Key {
-		case "length":
-		case "count":
-		case "size":
-		default:
-			return nil, errors.New("path: unknown function " + nod.Key + "()")
-		}
-		nod.Type |= cFunction
-		i += 2
-		if i == l {
-			nod.Type |= cIsTerminal
-			return nod, nil
-		}
-	} else if path[i] == '[' {
-		// array
-		i, err = parseArrayIndex(path, i, nod)
-		if err != nil {
-			return nod, err
-		}
-		if nod.Type&cIsTerminal > 0 {
-			return nod, nil
-		}
+	// get node type
+	if done, i, err = nodeType(path, i, nod); done || err != nil {
+		return nod, err
 	}
-	ch := path[i]
-	if bytein(ch, []byte(" \t<=>+-*/)&|")) {
-		nod.Type |= cIsTerminal
-		return nod, nil
-	}
-	if ch == '.' {
-		i++
-	} else if ch != '[' { // nested array
-		return nil, errors.New("path: invalid element reference")
-	}
+
 	next, err := parsePath(path[i:])
 	if err != nil {
 		return nil, err
@@ -157,12 +130,54 @@ func parsePath(path []byte) (*tNode, error) {
 	return nod, nil
 }
 
+func nodeType(path []byte, i int, nod *tNode) (bool, int, error) {
+	var err error
+	l := len(path)
+	if path[i] == '(' && i < l-1 && path[i+1] == ')' {
+		// function
+		switch nod.Key {
+		case "length":
+		case "count":
+		case "size":
+		default:
+			return true, i, errors.New("path: unknown function " + nod.Key + "()")
+		}
+		nod.Type |= cFunction
+		i += 2
+		if i == l {
+			nod.Type |= cIsTerminal
+			return true, i, nil
+		}
+	} else if path[i] == '[' {
+		// array
+		i, err = parseArrayIndex(path, i, nod)
+		if err != nil {
+			return true, i, err
+		}
+		if nod.Type&cIsTerminal > 0 {
+			return true, i, nil
+		}
+	}
+	ch := path[i]
+	if bytein(ch, []byte(" \t<=>+-*/)&|")) {
+		nod.Type |= cIsTerminal
+		return true, i, nil
+	}
+	if ch == '.' {
+		i++
+	} else if ch != '[' { // nested array
+		return true, i, errors.New("path: invalid element reference")
+	}
+	return false, i, nil
+}
+
 func parseArrayIndex(path []byte, i int, nod *tNode) (int, error) {
 	nod.Type = cArrayType
 	l := len(path)
 	var err error
 	i++ // [
 	if i < l-1 && path[i] == '?' && path[i+1] == '(' {
+		// filter
 		nod.Type |= cArrayRanged | cAgg
 		i, err = readFilter(path, i+2, nod)
 		if err != nil {
@@ -170,31 +185,10 @@ func parseArrayIndex(path []byte, i int, nod *tNode) (int, error) {
 		}
 		i++ // )
 	} else {
-		num := 0
-		num, i = readInt(path, i)
-		if i == l || !bytein(path[i], []byte(`:,]`)) {
-			return i, errors.New("path: index bound missing")
-		}
-		nod.Left = num
-
-		switch path[i] {
-		case ',':
-			nod.Type |= cArrayRanged | cAgg
-			nod.Elems = append(nod.Elems, num)
-			for i < l && path[i] != ']' {
-				i++
-				num, i = readInt(path, i)
-				nod.Elems = append(nod.Elems, num)
-			}
-		case ':':
-			nod.Type |= cArrayRanged | cAgg
-			i++
-			num, ii := readInt(path, i)
-			if ii-i > 0 && num == 0 {
-				return i, errors.New("path: 0 as a second bound does not make sense")
-			}
-			i = ii
-			nod.Right = num
+		// single index, slice or index list
+		i, err = readArrayIndex(path, i, nod)
+		if err != nil {
+			return i, err
 		}
 	}
 	if i >= l || path[i] != ']' {
@@ -203,6 +197,37 @@ func parseArrayIndex(path []byte, i int, nod *tNode) (int, error) {
 	i++ // ]
 	if i == l {
 		nod.Type |= cIsTerminal
+	}
+	return i, nil
+}
+
+func readArrayIndex(path []byte, i int, nod *tNode) (int, error) {
+	l := len(path)
+	num := 0
+	num, i = readInt(path, i)
+	if i == l || !bytein(path[i], []byte(`:,]`)) {
+		return i, errors.New("path: index bound missing")
+	}
+	nod.Left = num
+
+	switch path[i] {
+	case ',':
+		nod.Type |= cArrayRanged | cAgg
+		nod.Elems = append(nod.Elems, num)
+		for i < l && path[i] != ']' {
+			i++
+			num, i = readInt(path, i)
+			nod.Elems = append(nod.Elems, num)
+		}
+	case ':':
+		nod.Type |= cArrayRanged | cAgg
+		i++
+		num, ii := readInt(path, i)
+		if ii-i > 0 && num == 0 {
+			return i, errors.New("path: 0 as a second bound does not make sense")
+		}
+		i = ii
+		nod.Right = num
 	}
 	return i, nil
 }
@@ -240,14 +265,7 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 	}
 
 	if nod.Type&cIsTerminal > 0 {
-		if nod.Type&cArrayType > 0 {
-			return sliceArray(input, nod)
-		}
-		eoe, err := skipValue(input, 0)
-		if err != nil {
-			return nil, err
-		}
-		return input[:eoe], nil
+		return termValue(input, nod)
 	}
 	if nod.Type&cArrayType > 0 {
 		input, err = sliceArray(input, nod)
@@ -259,6 +277,17 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 		}
 	}
 	return getValue(input, nod.Next)
+}
+
+func termValue(input []byte, nod *tNode) ([]byte, error) {
+	if nod.Type&cArrayType > 0 {
+		return sliceArray(input, nod)
+	}
+	eoe, err := skipValue(input, 0)
+	if err != nil {
+		return nil, err
+	}
+	return input[:eoe], nil
 }
 
 func getNodes(input []byte, nod *tNode) ([]byte, error) {
@@ -359,7 +388,6 @@ type tElem struct {
 
 // sliceArray select node(s) by bound(s)
 func sliceArray(input []byte, nod *tNode) ([]byte, error) {
-	l := len(input)
 	if input[0] != '[' {
 		return nil, errors.New("array expected at " + nod.Key)
 	}
@@ -374,19 +402,12 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 		return getFilteredElements(input, i, nod)
 	}
 
-	elems := make([]tElem, 0, 32)
 	// fullscan
-	for i < l && input[i] != ']' {
-		e, err := skipValue(input, i)
-		if err != nil {
-			return nil, err
-		}
-		elems = append(elems, tElem{i, e})
-		// skip spaces after value
-		i, err = skipSpaces(input, e)
-		if err != nil {
-			return nil, err
-		}
+	var elems []tElem
+	var err error
+	elems, i, err = arrayScan(input)
+	if err != nil {
+		return nil, err
 	}
 	if len(nod.Elems) > 0 {
 		result := []byte{'['}
@@ -414,6 +435,25 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 	input = input[elems[a].start:elems[b].end]
 	input = input[:len(input):len(input)]
 	return append([]byte{'['}, append(input, ']')...), nil
+}
+
+func arrayScan(input []byte) ([]tElem, int, error) {
+	i := 1
+	l := len(input)
+	elems := make([]tElem, 0, 32)
+	for i < l && input[i] != ']' {
+		e, err := skipValue(input, i)
+		if err != nil {
+			return nil, i, err
+		}
+		elems = append(elems, tElem{i, e})
+		// skip spaces after value
+		i, err = skipSpaces(input, e)
+		if err != nil {
+			return nil, i, err
+		}
+	}
+	return elems, i, nil
 }
 
 func getArrayElement(input []byte, i int, nod *tNode) ([]byte, error) {

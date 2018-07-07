@@ -153,8 +153,13 @@ func nextToken(path []byte, i int, prevOperator byte) (int, *tToken, error) {
 		if err != nil {
 			return 0, nil, err
 		}
+		// end of filter
 		if path[i] == ')' {
-			return i, tok, nil
+			break
+		}
+		// regexp
+		if path[i] == '/' && prevOperator == 'R' {
+			return readRegexp(path, i)
 		}
 		// number
 		if (path[i] >= '0' && path[i] <= '9') || (path[i] == '-' && prevOperator != 0) {
@@ -168,38 +173,38 @@ func nextToken(path []byte, i int, prevOperator byte) (int, *tToken, error) {
 		if path[i] == 't' || path[i] == 'f' {
 			return readBool(path, i)
 		}
-		// jsonpath node
-		if path[i] == '@' || path[i] == '$' {
-			nod, err := parsePath(path[i:])
-			if err != nil {
-				return 0, nil, err
-			}
-			for i < l && !bytein(path[i], []byte(" \t<=>+-*/)&|")) {
-				i++
-			}
-			return i, &tToken{Operand: &tOperand{Type: cOpNone, Node: nod}}, nil
-		}
-		// regexp
-		if path[i] == '/' && prevOperator == 'R' {
-			return readRegexp(path, i)
-		}
-		// operator
-		if path[i] == '+' || path[i] == '-' || path[i] == '*' || path[i] == '/' {
-			return i + 1, &tToken{Operator: path[i]}, nil
-		}
-		// compare
-		if i >= l-1 {
-			return i, nil, errors.New("unexpected end of token")
-		}
-		for ic, cmp := range operator {
-			if string(path[i:i+len(cmp)]) == cmp {
-				return i + len(cmp), &tToken{Operator: operatorCode[ic]}, nil
-			}
-		}
-		return 0, nil, errors.New("unknown token " + string(path[i]))
+		return tokComplex(path, i)
 	}
-
 	return i, tok, nil
+}
+
+func tokComplex(path []byte, i int) (int, *tToken, error) {
+	l := len(path)
+	// jsonpath node
+	if path[i] == '@' || path[i] == '$' {
+		nod, err := parsePath(path[i:])
+		if err != nil {
+			return 0, nil, err
+		}
+		for i < l && !bytein(path[i], []byte(" \t<=>+-*/)&|")) {
+			i++
+		}
+		return i, &tToken{Operand: &tOperand{Type: cOpNone, Node: nod}}, nil
+	}
+	// operator
+	if bytein(path[i], []byte(`+-*/`)) {
+		return i + 1, &tToken{Operator: path[i]}, nil
+	}
+	// compare
+	if i >= l-1 {
+		return i, nil, errors.New("unexpected end of token")
+	}
+	for ic, cmp := range operator {
+		if string(path[i:i+len(cmp)]) == cmp {
+			return i + len(cmp), &tToken{Operator: operatorCode[ic]}, nil
+		}
+	}
+	return 0, nil, errors.New("unknown token " + string(path[i]))
 }
 
 func readNumber(path []byte, i int) (int, *tToken, error) {
@@ -353,7 +358,7 @@ func decodeValue(input []byte, op *tOperand) error {
 	if err != nil {
 		return err
 	}
-	if input[i] == '"' || input[i] == '\'' || input[i] == '{' || input[i] == '[' {
+	if bytein(input[i], []byte(`"'{[`)) {
 		// string
 		op.Type = cOpString
 		if input[i] == '"' || input[i] == '\'' { // exclude quotes
@@ -391,111 +396,150 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 
 	if op == '+' || op == '-' || op == '*' || op == '/' {
 		// arithmetic
-		if left.Type != cOpNumber || right.Type != cOpNumber {
-			return nil, errors.New("invalid operands for " + string(op))
-		}
-		res.Type = left.Type
-		switch op {
-		case '+':
-			res.Number = left.Number + right.Number
-		case '-':
-			res.Number = left.Number - right.Number
-		case '*':
-			res.Number = left.Number * right.Number
-		case '/':
-			res.Number = left.Number / right.Number
-		}
-		return &res, nil
+		return opArithmetic(op, left, right)
 	} else if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' || op == 'R' {
 		// comparison
-		res.Type = cOpBool
-		if left.Type == cOpNull || right.Type == cOpNull {
-			res.Bool = false
-			return &res, nil
-		}
-		if op == 'R' {
-			if !(left.Type == cOpString && right.Type == cOpRegexp) {
-				return nil, errors.New("invalid operands for regexp match")
-			}
-		} else if left.Type != right.Type {
-			return nil, errors.New("operand types do not match")
-		}
-		switch left.Type {
-		case cOpBool:
-			switch op {
-			case 'g':
-				res.Bool = (left.Bool && !right.Bool)
-			case 'l':
-				res.Bool = (!left.Bool && right.Bool)
-			case 'E':
-				res.Bool = (left.Bool == right.Bool)
-			case 'N':
-				res.Bool = (left.Bool != right.Bool)
-			case 'G':
-			case 'L':
-				res.Bool = right.Bool
-			}
-		case cOpNumber:
-			switch op {
-			case 'g':
-				res.Bool = left.Number > right.Number
-			case 'l':
-				res.Bool = left.Number < right.Number
-			case 'E':
-				res.Bool = left.Number == right.Number
-			case 'N':
-				res.Bool = left.Number != right.Number
-			case 'G':
-				res.Bool = left.Number >= right.Number
-			case 'L':
-				res.Bool = left.Number <= right.Number
-			}
-		case cOpString:
-			switch op {
-			case 'E':
-				res.Bool = compareSlices(left.Str, right.Str) == 0
-			case 'N':
-				res.Bool = compareSlices(left.Str, right.Str) != 0
-			case 'R':
-				res.Bool = right.Regexp.MatchString(string(left.Str))
-			default:
-				return left, errors.New("operator is not applicable to strings")
-			}
-		}
-		return &res, nil
+		return opComparison(op, left, right)
 	} else if op == '&' || op == '|' {
 		// logic
-		res.Type = cOpBool
-		if left.Type == cOpNull || right.Type == cOpNull {
-			res.Bool = false
-			return &res, nil
-		}
-		l := false
-		r := false
-		switch left.Type {
-		case cOpBool:
-			l = left.Bool
-		case cOpNumber:
-			l = left.Number != 0
-		case cOpString:
-			l = len(left.Str) > 0
-		}
-		switch right.Type {
-		case cOpBool:
-			r = right.Bool
-		case cOpNumber:
-			r = right.Number != 0
-		case cOpString:
-			r = len(right.Str) > 0
-		}
-		if op == '&' {
-			res.Bool = l && r
-		} else {
-			res.Bool = l || r
-		}
-		return &res, nil
+		return opLogic(op, left, right)
 	}
 	return &res, errors.New("unknown operator")
+}
+
+func opArithmetic(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
+	var res tOperand
+
+	if left.Type != cOpNumber || right.Type != cOpNumber {
+		return nil, errors.New("invalid operands for " + string(op))
+	}
+	res.Type = left.Type
+	switch op {
+	case '+':
+		res.Number = left.Number + right.Number
+	case '-':
+		res.Number = left.Number - right.Number
+	case '*':
+		res.Number = left.Number * right.Number
+	case '/':
+		res.Number = left.Number / right.Number
+	}
+	return &res, nil
+}
+
+func opComparison(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
+	var res tOperand
+
+	res.Type = cOpBool
+	if left.Type == cOpNull || right.Type == cOpNull {
+		res.Bool = false
+		return &res, nil
+	}
+	if op == 'R' {
+		if !(left.Type == cOpString && right.Type == cOpRegexp) {
+			return nil, errors.New("invalid operands for regexp match")
+		}
+	} else if left.Type != right.Type {
+		return nil, errors.New("operand types do not match")
+	}
+	switch left.Type {
+	case cOpBool:
+		return opComparisonBool(op, left, right)
+	case cOpNumber:
+		return opComparisonNumber(op, left, right)
+	case cOpString:
+		return opComparisonString(op, left, right)
+	}
+	return &res, nil
+}
+
+func opComparisonBool(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
+	var res tOperand
+
+	res.Type = cOpBool
+	switch op {
+	case 'g':
+		res.Bool = (left.Bool && !right.Bool)
+	case 'l':
+		res.Bool = (!left.Bool && right.Bool)
+	case 'E':
+		res.Bool = (left.Bool == right.Bool)
+	case 'N':
+		res.Bool = (left.Bool != right.Bool)
+	case 'G':
+	case 'L':
+		res.Bool = right.Bool
+	}
+	return &res, nil
+}
+
+func opComparisonNumber(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
+	var res tOperand
+	res.Type = cOpBool
+	switch op {
+	case 'g':
+		res.Bool = left.Number > right.Number
+	case 'l':
+		res.Bool = left.Number < right.Number
+	case 'E':
+		res.Bool = left.Number == right.Number
+	case 'N':
+		res.Bool = left.Number != right.Number
+	case 'G':
+		res.Bool = left.Number >= right.Number
+	case 'L':
+		res.Bool = left.Number <= right.Number
+	}
+	return &res, nil
+}
+
+func opComparisonString(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
+	var res tOperand
+	res.Type = cOpBool
+	switch op {
+	case 'E':
+		res.Bool = compareSlices(left.Str, right.Str) == 0
+	case 'N':
+		res.Bool = compareSlices(left.Str, right.Str) != 0
+	case 'R':
+		res.Bool = right.Regexp.MatchString(string(left.Str))
+	default:
+		return left, errors.New("operator is not applicable to strings")
+	}
+	return &res, nil
+}
+
+func opLogic(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
+	var res tOperand
+	res.Type = cOpBool
+	if left.Type == cOpNull || right.Type == cOpNull {
+		res.Bool = false
+		return &res, nil
+	}
+	l := false
+	r := false
+	switch left.Type {
+	case cOpBool:
+		l = left.Bool
+	case cOpNumber:
+		l = left.Number != 0
+	case cOpString:
+		l = len(left.Str) > 0
+	}
+	switch right.Type {
+	case cOpBool:
+		r = right.Bool
+	case cOpNumber:
+		r = right.Number != 0
+	case cOpString:
+		r = len(right.Str) > 0
+	}
+	if op == '&' {
+		res.Bool = l && r
+	} else {
+		res.Bool = l || r
+	}
+	return &res, nil
 }
 
 func compareSlices(s1 []byte, s2 []byte) int {
