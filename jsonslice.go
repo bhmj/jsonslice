@@ -405,7 +405,7 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 	// fullscan
 	var elems []tElem
 	var err error
-	elems, i, err = arrayScan(input)
+	elems, err = arrayScan(input)
 	if err != nil {
 		return nil, err
 	}
@@ -437,23 +437,23 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 	return append([]byte{'['}, append(input, ']')...), nil
 }
 
-func arrayScan(input []byte) ([]tElem, int, error) {
+func arrayScan(input []byte) ([]tElem, error) {
 	i := 1
 	l := len(input)
 	elems := make([]tElem, 0, 32)
 	for i < l && input[i] != ']' {
 		e, err := skipValue(input, i)
 		if err != nil {
-			return nil, i, err
+			return nil, err
 		}
 		elems = append(elems, tElem{i, e})
 		// skip spaces after value
 		i, err = skipSpaces(input, e)
 		if err != nil {
-			return nil, i, err
+			return nil, err
 		}
 	}
-	return elems, i, nil
+	return elems, nil
 }
 
 func getArrayElement(input []byte, i int, nod *tNode) ([]byte, error) {
