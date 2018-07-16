@@ -583,33 +583,26 @@ func skipNumber(input []byte, i int) int {
 }
 
 func skipBoolNull(input []byte, i int) (int, error) {
-	l := len(input)
-	vals := [][]byte{[]byte("true"), []byte("false"), []byte("null")}
-	v := -1
-	p := 0
-	for ; i < l; i++ {
-		ch := input[i]
-		if ch >= 'A' && ch <= 'Z' {
-			ch += 'a' - 'A'
-		}
-		if v == -1 {
-			for iv, vv := range vals {
-				if ch == vv[0] {
-					v = iv
-				}
-			}
-			if v == -1 {
-				return i, errors.New("unrecognized value")
-			}
-		} else if vals[v][p] != ch {
-			return i, errors.New("unrecognized value")
-		}
-		p++
-		if p == len(vals[v]) {
-			break
+	needles := [...][]byte{[]byte("true"), []byte("false"), []byte("null")}
+	for n := 0; n < len(needles); n++ {
+		if matchSubslice(input[i:], needles[n]) {
+			return i + len(needles[n]), nil
 		}
 	}
-	return i, nil
+	return i, errors.New("unrecognized value")
+}
+
+func matchSubslice(str, needle []byte) bool {
+	l := len(needle)
+	if len(str) < l {
+		return false
+	}
+	for i := 0; i < l; i++ {
+		if str[i] != needle[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func checkValueType(input []byte, nod *tNode) error {

@@ -204,6 +204,8 @@ Currently only dot notation (`$.foo.bar`) is supported.
   
 ## Changelog
 
+**0.6.3** (2018-07-16) -- Boolean/null value error fixed.
+
 **0.6.2** (2018-07-03) -- More tests added, error handling clarified.
 
 **0.6.1** (2018-06-26) -- Nested array indexing is now supported.
@@ -223,7 +225,18 @@ Currently only dot notation (`$.foo.bar`) is supported.
 
 **0.3.0** (2018-05-05) -- Beta  
 
+## Roadmap
+
+- [x] length(), count(), size() functions
+- [x] filters: simple expressions
+- [x] filters: complex expressions (with logical operators)
+- [x] nested arrays support
+- [ ] recursive descent operator
+- [ ] bracket notation for multiple field queries
+- [ ] assignment in query (update json)
+
 ## Contributing
+
 1. Fork it!
 2. Create your feature branch: `git checkout -b my-new-feature`
 3. Commit your changes: `git commit -am 'Add some feature'`

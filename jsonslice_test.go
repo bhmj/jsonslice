@@ -17,7 +17,8 @@ func init() {
 	data = []byte(`
 		{
 			"store": {
-				"open": true, 
+				"open": true,
+				"branch": null,
 				"book": [
 					{
 						"category": "reference",
@@ -144,6 +145,10 @@ func Test_Expressions(t *testing.T) {
 		{`$.expensive`, []byte(`10`)},
 		// simple query
 		{`$.store.book[3].author`, []byte(`"J. R. R. Tolkien"`)},
+
+		// boolean, null
+		{`$.store.open`, []byte(`true`)},
+		{`$.store.branch`, []byte(`null`)},
 
 		// negative index
 		{`$.store.book[-1].author`, []byte(`"J. R. R. Tolkien"`)},
