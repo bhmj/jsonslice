@@ -69,14 +69,15 @@ ok      github.com/bhmj/jsonslice       82.348s
 
 ## Specs
 
-See [jsonpath.com](http://jsonpath.com) for specs and examples.  
-See [Jayway JsonPath](https://github.com/json-path/JsonPath) for details on jsonpath regexp syntax.
+See [Stefan Gössner's article](http://goessner.net/articles/JsonPath/index.html#e2) for original specs and examples.  
 
 ## Limitations and deviations
 
-1. Only single-word keys are supported (`/\w+/`)
+1. Only single-word keys (`/\w+/`) are supported by now. 
 
-2. A single index reference returns an element, not an array:  
+2. Only dot notation (`$.foo.bar`) is supported by now. Bracket notation is coming soon.
+
+3. A single index reference returns an element, not an array:  
 ```
 ./jsonslice sample0.json $.store.book[0]
 ```
@@ -107,10 +108,6 @@ Also, indexing on root node is supported (assuming json is an array and not an o
 ```
 ./jsonslice sample1.json $[0].author
 ```
-
-### Notation
-
-Currently only dot notation (`$.foo.bar`) is supported.
 
 ## Expressions
 
@@ -181,7 +178,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
   `\|\|`  | Logical OR
 
 "Having" filter:  
-`$.stores[?(@.work_time[:].time_close=="16:00:00")])].id` -- find ids of every store having at least one day with a closing time at 16:00
+`$.stores[?(@.work_time[:].time_close=="16:00:00")])].id` -- find IDs of every store having at least one day with a closing time at 16:00
 
 ### Updates (TODO)
 
@@ -231,7 +228,7 @@ Currently only dot notation (`$.foo.bar`) is supported.
 - [x] filters: simple expressions
 - [x] filters: complex expressions (with logical operators)
 - [x] nested arrays support
-- [ ] recursive descent operator
+- [ ] deepscan operator (`..`)
 - [ ] bracket notation for multiple field queries
 - [ ] assignment in query (update json)
 
