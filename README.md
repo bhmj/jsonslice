@@ -179,7 +179,7 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   `<=`  | Less than or equal to
   `=~`  | Match a regexp<br>`[?(@.name =~ /sword.*/i]`
   `&&`  | Logical AND<br>`[?(@.price < 10 && @isbn)]`
-  `\|\|`  | Logical OR<br>`[?(@.price > 10 || @.category == 'reference')]`
+  `\|\|`  | Logical OR<br>`[?(@.price > 10 \|\| @.category == 'reference')]`
 
 "Having" filter:  
 `$.stores[?(@.work_time[:].time_close=="16:00:00")])].id` -- find IDs of every store having at least one day with a closing time at 16:00
