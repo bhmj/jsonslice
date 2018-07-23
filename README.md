@@ -130,6 +130,9 @@ Also, indexing on root node is supported (assuming json is an array and not an o
 ```
   $.obj
   $.obj.val
+  $.*                 -- wildcard (matches any value of any type)
+  $.*.val             -- wildcard object (matches any object)
+  $.*[:].val          -- wildcard array (matches any array)
 ```
 ####  Indexed arrays
 ```
@@ -198,8 +201,13 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   `./jsonslice sample1.json '$[1].author'`  
   `./jsonslice sample0.json '$.store.book[?(@.price > 10)]'`  
   `./jsonslice sample0.json '$.store.book[?(@.price > $.expensive)]'`  
+
+  More examples can be found in `jsonslice_test.go`  
   
 ## Changelog
+
+**0.7.0** (2018-07-23) -- Wildcard key (`*`) added.
+> `$.store.*[:].price` -> `[8.95,12.99,8.99,22.99]`
 
 **0.6.3** (2018-07-16) -- Boolean/null value error fixed.
 
@@ -228,6 +236,7 @@ Also, indexing on root node is supported (assuming json is an array and not an o
 - [x] filters: simple expressions
 - [x] filters: complex expressions (with logical operators)
 - [x] nested arrays support
+- [x] wildcard operator (`*`)
 - [ ] deepscan operator (`..`)
 - [ ] bracket notation for multiple field queries
 - [ ] assignment in query (update json)

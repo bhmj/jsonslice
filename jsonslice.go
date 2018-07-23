@@ -70,6 +70,7 @@ const (
 	cFunction    = 1 << iota // function
 	cSubject     = 1 << iota // function subject
 	cAgg         = 1 << iota // aggregating
+	cDeep        = 1 << iota // deepscan
 )
 
 type tNode struct {
@@ -104,7 +105,11 @@ func parsePath(path []byte) (*tNode, error) {
 		return nil, errors.New("path: unexpected end of path")
 	}
 	// get key
-	for ; i < l && !bytein(path[i], []byte(" \t.[()]<=>+-*/&|")); i++ {
+	if path[i] == '*' {
+		i++
+	} else {
+		for ; i < l && !bytein(path[i], []byte(" \t.[()]<=>+-*/&|")); i++ {
+		}
 	}
 	nod.Key = string(path[:i])
 
@@ -135,19 +140,7 @@ func nodeType(path []byte, i int, nod *tNode) (bool, int, error) {
 	l := len(path)
 	if path[i] == '(' && i < l-1 && path[i+1] == ')' {
 		// function
-		switch nod.Key {
-		case "length":
-		case "count":
-		case "size":
-		default:
-			return true, i, errors.New("path: unknown function " + nod.Key + "()")
-		}
-		nod.Type |= cFunction
-		i += 2
-		if i == l {
-			nod.Type |= cIsTerminal
-			return true, i, nil
-		}
+		return detectFn(path, i, nod)
 	} else if path[i] == '[' {
 		// array
 		i, err = parseArrayIndex(path, i, nod)
@@ -165,10 +158,33 @@ func nodeType(path []byte, i int, nod *tNode) (bool, int, error) {
 	}
 	if ch == '.' {
 		i++
+		if i == l {
+			return true, i, errors.New("path: unexpected end of path")
+		}
+		if path[i] == '.' {
+			nod.Type |= cDeep
+			i++
+		}
 	} else if ch != '[' { // nested array
 		return true, i, errors.New("path: invalid element reference")
 	}
 	return false, i, nil
+}
+
+func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
+	switch nod.Key {
+	case "length":
+	case "count":
+	case "size":
+	default:
+		return true, i, errors.New("path: unknown function " + nod.Key + "()")
+	}
+	nod.Type |= cFunction
+	i += 2
+	if i == len(path) {
+		nod.Type |= cIsTerminal
+	}
+	return true, i, nil
 }
 
 func parseArrayIndex(path []byte, i int, nod *tNode) (int, error) {
@@ -234,10 +250,7 @@ func readArrayIndex(path []byte, i int, nod *tNode) (int, error) {
 
 func getValue(input []byte, nod *tNode) (result []byte, err error) {
 
-	i, err := skipSpaces(input, 0)
-	if err != nil {
-		return nil, err
-	}
+	i, _ := skipSpaces(input, 0)
 
 	input = input[i:]
 	if len(input) == 0 {
@@ -245,6 +258,10 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 	}
 	if input[0] != '{' && input[0] != '[' {
 		return nil, errors.New("object or array expected")
+	}
+	// wildcard
+	if nod.Key == "*" {
+		return wildScan(input, nod)
 	}
 	if nod.Key != "$" && nod.Key != "@" && nod.Key != "" {
 		// find the key and seek to the value
@@ -263,13 +280,11 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 	if nod.Type&cSubject > 0 {
 		return doFunc(input, nod.Next)
 	}
-
 	if nod.Type&cIsTerminal > 0 {
 		return termValue(input, nod)
 	}
 	if nod.Type&cArrayType > 0 {
-		input, err = sliceArray(input, nod)
-		if err != nil {
+		if input, err = sliceArray(input, nod); err != nil {
 			return nil, err
 		}
 		if nod.Type&cAgg > 0 {
@@ -277,6 +292,59 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 		}
 	}
 	return getValue(input, nod.Next)
+}
+
+func wildScan(input []byte, nod *tNode) (result []byte, err error) {
+	result = []byte{'['}
+	for {
+		input, err = getKeyValue(input, nod.Key)
+		if err != nil {
+			return nil, err
+		}
+		elem := []byte{}
+		skip := 0
+
+		if nod.Type&cIsTerminal > 0 {
+			// any field type matches
+			elem, err = termValue(input, nod)
+			skip = len(elem)
+		} else {
+			if skip, err = skipValue(input, 0); err != nil {
+				return nil, err
+			}
+			switch input[0] {
+			case '[': // array type -- aggregate fields
+				if nod.Type&cArrayType > 0 {
+					if elem, err = getNodes(input, nod.Next); err != nil {
+						return nil, err
+					}
+					elem = elem[1 : len(elem)-1]
+				}
+			case '{': // object type -- process jsonpath query
+				if nod.Type&cArrayType == 0 {
+					if elem, err = getValue(input[:skip], nod.Next); err != nil {
+						return nil, err
+					}
+				}
+			}
+		}
+		if len(elem) > 0 {
+			if len(result) > 1 {
+				result = append(result, ',')
+			}
+			result = append(result, elem...)
+		}
+		input = input[skip:]
+
+		i, err := skipSpaces(input, 0)
+		if err != nil {
+			return nil, err
+		}
+		if input[i] == '}' {
+			break
+		}
+	}
+	return append(result, ']'), nil
 }
 
 func termValue(input []byte, nod *tNode) ([]byte, error) {
@@ -365,7 +433,7 @@ func getKeyValue(input []byte, key string) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			if key == string(k) {
+			if key == string(k) || key == "*" {
 				return input[i:], nil
 			}
 			e, err = skipValue(input, i)
@@ -621,15 +689,6 @@ func checkValueType(input []byte, nod *tNode) error {
 	} else if nod.Type&cArrayType > 0 && ch != '[' {
 		return errors.New("array expected at " + nod.Key)
 	}
-	/*
-		if ch == '[' && nod.Type&cArrayType == 0 && nod.Type&cIsTerminal == 0 {
-			return errors.New("object expected at " + nod.Key)
-		} else if ch == '{' && nod.Type&cArrayType > 0 {
-			return errors.New("array expected at " + nod.Key)
-		} else if ch != '{' && ch != '[' && nod.Type&cIsTerminal == 0 {
-			return errors.New("object or array expected at " + nod.Key)
-		}
-	*/
 	return nil
 }
 

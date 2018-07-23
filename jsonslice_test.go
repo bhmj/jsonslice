@@ -221,6 +221,13 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.bicycle.equipment[1][0]`, []byte(`"peg leg"`)},
 		// filter expression not found -- not an error
 		{`$.store.book[?($.store[0] > 0)]`, []byte(`[]`)},
+
+		// wildcard: terminal value
+		{`$.store.book[0].*`, []byte(`["reference","Nigel Rees","Sayings of the Century",8.95]`)},
+		// wildcard: object field
+		{`$.store.*.price`, []byte(`[19.95]`)},
+		// wildcard: array field
+		{`$.store.*[:].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
 	}
 
 	for _, tst := range tests {
