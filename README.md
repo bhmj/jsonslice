@@ -150,7 +150,7 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   $.obj[-2:] -- items from the second element from the end (inclusive) till the end
   $.obj[:-2] -- items from the beginning to the second element from the end (exclusive, i.e. without two last elements)
   $.obj[:-1] -- items from the beginning to the end but without one final element
-  $.obj[3:5] -- items from index 2 (inclusive) to index 5 (exclusive)
+  $.obj[2:5] -- items from index 2 (inclusive) to index 5 (exclusive)
 ```
 
 ### Aggregating expressions
@@ -162,8 +162,9 @@ Also, indexing on root node is supported (assuming json is an array and not an o
 ```
 #### Filters
 ```
-  @                  -- the current node
   [?(<expression>)]  -- filter expression. Applicable to arrays only
+  @                  -- the root of the current element of the array. Used only within a filter.
+  @.val              -- a field of the current element of the array.
 ```
 
 #### Filter operators
@@ -171,14 +172,14 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   Operator | Description
   --- | ---
   `==`  | Equal to<br>Use single or double quotes for string expressions.<br>`[?(@.color=='red')]` or `[?(@.color=="red")]`
-  `!=`  | Not equal to
-  `>`   | Greater than
+  `!=`  | Not equal to<br>`[?(@.author != "Herman Melville")]`
+  `>`   | Greater than<br>`[?(@.price > 10)]`
   `>=`  | Grater than or equal to
   `<`   | Less than
   `<=`  | Less than or equal to
-  `=~`  | Match a regexp<br>`[?(@.name =~ /cat.*/i]`
-  `&&`  | Logical AND
-  `\|\|`  | Logical OR
+  `=~`  | Match a regexp<br>`[?(@.name =~ /sword.*/i]`
+  `&&`  | Logical AND<br>`[?(@.price < 10 && @isbn)]`
+  `\|\|`  | Logical OR<br>`[?(@.price > 10 || @.category == 'reference')]`
 
 "Having" filter:  
 `$.stores[?(@.work_time[:].time_close=="16:00:00")])].id` -- find IDs of every store having at least one day with a closing time at 16:00
