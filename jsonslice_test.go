@@ -173,14 +173,14 @@ func Test_Expressions(t *testing.T) {
 		// aggregated, enumerate indexes
 		{`$.store.book[0,2].title`, []byte(`["Sayings of the Century","Moby Dick"]`)},
 
-		// simple expression
+		// filters: simple expression
 		{`$.store.book[?(@.price>10)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
-		// simple expression
+		// filters: simple expression + spaces
 		{`$.store.book[?(@.price < 10)].title`, []byte(`["Sayings of the Century","Moby Dick"]`)},
-		// simple expression
+		// filters: simple expression
 		{`$.store.book[?(@.price==12.99)].title`, []byte(`["Sword of Honour"]`)},
-		// +spaces
-		{`$.store.book[?(@.price > 10)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
+		// more spaces
+		{`$.store.book[?(   @.price   >   10)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
 		// field presence
 		{`$.store.book[?(@.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
 		// string match
@@ -207,13 +207,13 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.book[?(@.isbn != "" || @.price)].title`, []byte(`["Sayings of the Century","Sword of Honour","Moby Dick","The Lord of the Rings"]`)},
 		// non-empty field
 		{`$.store.book[?(@.price)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
-		// bool value
+		// bool ==
 		{`$.store.book[?($.store.open == true)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
-		// bool value
+		// bool !=
 		{`$.store.book[?($.store.open != false)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
-		// bool value
+		// bool <
 		{`$.store.book[?($.store.open > false)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
-		// bool value
+		// bool >
 		{`$.store.book[?($.store.open < true)].price`, []byte(``)},
 		// escaped chars
 		{`$.store.bicycle.equipment[?(@[0] == "\"quoted\"")]`, []byte(`[["\"quoted\""]]`)},
@@ -227,18 +227,20 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.bicycle.equipment[1][0]`, []byte(`"peg leg"`)},
 		// filter expression not found -- not an error
 		{`$.store.book[?($.store[0] > 0)]`, []byte(`[]`)},
-		// wildcard: terminal value
+		// wildcard: any key within an object
 		{`$.store.book[0].*`, []byte(`["reference","Nigel Rees","Sayings of the Century",8.95]`)},
-		// wildcard: object field
+		// wildcard: named key on a given level
 		{`$.store.*.price`, []byte(`[19.95]`)},
-		// wildcard: array field
+		// wildcard: named key in any array on a given level
 		{`$.store.*[:].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
 
-		// empty array handling
+		// all elements of an empty array is an empty array
 		{`$.store.manager[:]`, []byte(`[]`)},
 
 		// multiple keys (ordered as in query)
 		{`$.store.book[:]['price','title']`, []byte(`[[8.95,"Sayings of the Century"],[12.99,"Sword of Honour"],[8.99,"Moby Dick"],[22.99,"The Lord of the Rings"]]`)},
+		// multiple keys combined with filter
+		{`$.store.book[?(@.price > $.expensive*1.1)]['price','title']`, []byte(`[[12.99,"Sword of Honour"],[22.99,"The Lord of the Rings"]]`)},
 	}
 
 	for _, tst := range tests {
@@ -295,9 +297,9 @@ func Test_Errors(t *testing.T) {
 		// array: node does not exist
 		{data, `$.store.book[-99:-15]`, `specified element not found`},
 
-		// empty filter
+		// filter expression: empty
 		{data, `$.store.book[?()]`, `empty filter`},
-		// empty filter
+		// filter expression: invalid
 		{data, `$.store.book[?(1+)]`, `not enough arguments`},
 
 		// wrong bool value
@@ -311,7 +313,7 @@ func Test_Errors(t *testing.T) {
 		// unexpected EOF
 		{[]byte(`{"foo": {"bar":"moo`), `$.foo.moo`, `unexpected end of input`},
 
-		// unexpected EOF
+		// invalid json
 		{[]byte(`{"foo" - { "bar": 0 }}`), `$.foo.bar`, `':' expected`},
 
 		// invalid string operator

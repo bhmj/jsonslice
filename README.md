@@ -73,7 +73,7 @@ See [Stefan Gössner's article](http://goessner.net/articles/JsonPath/index.html
 
 ## Limitations and deviations
 
-1. Only single-word keys (`/\w+/`) are supported by now. 
+1. Single-word keys (`/\w+/`) are supported in dot notation mode; use bracket notation for multi-word keys.
 
 2. A single index reference returns an element, not an array:  
 ```
