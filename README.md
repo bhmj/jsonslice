@@ -75,9 +75,7 @@ See [Stefan Gössner's article](http://goessner.net/articles/JsonPath/index.html
 
 1. Only single-word keys (`/\w+/`) are supported by now. 
 
-2. Only dot notation (`$.foo.bar`) is supported by now. Bracket notation is coming soon.
-
-3. A single index reference returns an element, not an array:  
+2. A single index reference returns an element, not an array:  
 ```
 ./jsonslice sample0.json $.store.book[0]
 ```
@@ -117,6 +115,8 @@ Also, indexing on root node is supported (assuming json is an array and not an o
 ```
   $                   -- root node (can be either object or array)
   .node               -- dot-notated child
+  ['node']            -- bracket-notated child
+  ['foo','bar']       -- bracket-notated children
   [123]               -- array index
   [12:34]             -- array range
 ```
@@ -207,6 +207,9 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   
 ## Changelog
 
+**0.7.1** (2018-10-15) -- bracket notation is now supported. 
+> `$.store.book[:]['price','title']` -> `[[8.95,"Sayings of the Century"],[12.99,"Sword of Honour"],[8.99,"Moby Dick"],[22.99,"The Lord of the Rings"]]`
+
 **0.7.0** (2018-07-23) -- Wildcard key (`*`) added.
 > `$.store.*[:].price` -> `[8.95,12.99,8.99,22.99]`
 
@@ -239,7 +242,7 @@ Also, indexing on root node is supported (assuming json is an array and not an o
 - [x] nested arrays support
 - [x] wildcard operator (`*`)
 - [ ] deepscan operator (`..`)
-- [ ] bracket notation for multiple field queries
+- [x] bracket notation for multiple field queries
 - [ ] assignment in query (update json)
 
 ## Contributing

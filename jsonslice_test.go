@@ -19,6 +19,7 @@ func init() {
 			"store": {
 				"open": true,
 				"branch": null,
+				"manager": [],
 				"book": [
 					{
 						"category": "reference",
@@ -63,6 +64,12 @@ func init() {
 	`)
 }
 
+func randomBytes(p []byte, min, max int) {
+	for i := 0; i < len(p); i++ {
+		p[i] = byte(rand.Intn(max-min) + min)
+	}
+}
+
 func TestFuzzyPath(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
@@ -77,16 +84,15 @@ func TestFuzzyPath(t *testing.T) {
 	}()
 	rand.Seed(time.Now().UnixNano())
 	b := make([]byte, 100)
-	top := 10000000
+	top := 1000000
 	fmt.Printf("\rpath fuzzy [                    ]\rpath fuzzy [")
 	for i := 0; i < top; i++ {
 		if i%(top/20) == 1 {
 			fmt.Printf(".")
 		}
-		n, err := rand.Read(b[:rand.Int()%len(b)])
-		if err != nil {
-			t.Fatal(err)
-		}
+		randomBytes(b, 32, 127)
+		n := rand.Intn(len(b))
+		b[0] = '$'
 		str = string(b[:n])
 		parsePath([]byte(str))
 	}
@@ -221,13 +227,18 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.bicycle.equipment[1][0]`, []byte(`"peg leg"`)},
 		// filter expression not found -- not an error
 		{`$.store.book[?($.store[0] > 0)]`, []byte(`[]`)},
-
 		// wildcard: terminal value
 		{`$.store.book[0].*`, []byte(`["reference","Nigel Rees","Sayings of the Century",8.95]`)},
 		// wildcard: object field
 		{`$.store.*.price`, []byte(`[19.95]`)},
 		// wildcard: array field
 		{`$.store.*[:].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
+
+		// empty array handling
+		{`$.store.manager[:]`, []byte(`[]`)},
+
+		// multiple keys (ordered as in query)
+		{`$.store.book[:]['price','title']`, []byte(`[[8.95,"Sayings of the Century"],[12.99,"Sword of Honour"],[8.99,"Moby Dick"],[22.99,"The Lord of the Rings"]]`)},
 	}
 
 	for _, tst := range tests {
