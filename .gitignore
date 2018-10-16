@@ -4,3 +4,4 @@ debug
 *.prof
 *.test
 coverage.out
+jsonslice

@@ -1,0 +1,5 @@
+[
+                { "MinPrice": 100, "Sale": 10 },
+                { "MinPrice": 1000, "Sale": 15 },
+                { "MinPrice": 10000, "Sale": 20 }
+        ]
