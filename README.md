@@ -196,21 +196,22 @@ Also, indexing on root node is supported (assuming json is an array and not an o
 
   Assuming `sample0.json` and `sample1.json` in the example directory:  
 
-  `./jsonslice sample0.json '$.store.book[0]'`  
-  `./jsonslice sample0.json '$.store.book[0].title'`  
-  `./jsonslice sample0.json '$.store.book[0:-1]'`  
-  `./jsonslice sample1.json '$[1].author'`  
-  `./jsonslice sample0.json '$.store.book[?(@.price > 10)]'`  
-  `./jsonslice sample0.json '$.store.book[?(@.price > $.expensive)]'`  
+  `cat sample0.json | ./jsonslice '$.store.book[0]'`  
+  `cat sample0.json | ./jsonslice '$.store.book[0].title'`  
+  `cat sample0.json | ./jsonslice '$.store.book[0:-1]'`  
+  `cat sample1.json | ./jsonslice '$[1].author'`  
+  `cat sample0.json | ./jsonslice '$.store.book[?(@.price > 10)]'`  
+  `cat sample0.json | ./jsonslice '$.store.book[?(@.price > $.expensive)]'`  
 
   More examples can be found in `jsonslice_test.go`  
   
 ## Changelog
 
-**0.7.1** (2018-10-15) -- bracket notation is now supported. 
+**0.7.1** (2018-10-16) -- bracket notation is now supported.
 > `$.store.book[:]['price','title']` -> `[[8.95,"Sayings of the Century"],[12.99,"Sword of Honour"],[8.99,"Moby Dick"],[22.99,"The Lord of the Rings"]]`
 
 **0.7.0** (2018-07-23) -- Wildcard key (`*`) added.
+> `$.store.book[-1].*` -> `["fiction","J. R. R. Tolkien","The Lord of the Rings","0-395-19395-8",22.99]`  
 > `$.store.*[:].price` -> `[8.95,12.99,8.99,22.99]`
 
 **0.6.3** (2018-07-16) -- Boolean/null value error fixed.
