@@ -109,7 +109,7 @@ func parsePath(path []byte) (*tNode, error) {
 	if path[i] == '*' {
 		i++
 	} else {
-		for ; i < l && !bytein(path[i], []byte(" \t.[()]<=>+-*/&|")); i++ {
+		for ; i < l && !bytein(path[i], []byte{' ', '\t', '.', '[', '(', ')', ']', '<', '=', '>', '+', '-', '*', '/', '&', '|'}); i++ {
 		}
 	}
 	nod.Key = string(path[:i])
@@ -166,7 +166,7 @@ func nodeType(path []byte, i int, nod *tNode) (bool, int, error) {
 		}
 	}
 	ch := path[i]
-	if bytein(ch, []byte(" \t<=>+-*/)&|")) {
+	if bytein(ch, []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|'}) {
 		nod.Type |= cIsTerminal
 		return true, i, nil
 	}
@@ -264,7 +264,7 @@ func readArrayIndex(path []byte, i int, nod *tNode) (int, error) {
 	l := len(path)
 	num := 0
 	num, i = readInt(path, i)
-	if i == l || !bytein(path[i], []byte(`:,]`)) {
+	if i == l || !bytein(path[i], []byte{':', ',', ']'}) {
 		return i, errors.New("path: index bound missing")
 	}
 	nod.Left = num
@@ -299,7 +299,7 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 	if len(input) == 0 {
 		return nil, errors.New("unexpected end of input")
 	}
-	if !bytein(input[0], []byte("{[")) {
+	if !bytein(input[0], []byte{'{', '['}) {
 		return nil, errors.New("object or array expected")
 	}
 	// wildcard
@@ -840,7 +840,7 @@ func readInt(path []byte, i int) (int, int) {
 func skipSpaces(input []byte, i int) (int, error) {
 	l := len(input)
 	for ; i < l; i++ {
-		if !bytein(input[i], []byte(" ,\t\r\n")) {
+		if !bytein(input[i], []byte{' ', ',', '\t', '\r', '\n'}) {
 			break
 		}
 	}
