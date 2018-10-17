@@ -87,8 +87,8 @@ type tNode struct {
 }
 
 func bytein(b byte, seq []byte) bool {
-	for _, v := range seq {
-		if b == v {
+	for i := 0; i < len(seq); i++ {
+		if b == seq[i] {
 			return true
 		}
 	}

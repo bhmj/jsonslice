@@ -186,13 +186,13 @@ func tokComplex(path []byte, i int) (int, *tToken, error) {
 		if err != nil {
 			return 0, nil, err
 		}
-		for i < l && !bytein(path[i], []byte(" \t<=>+-*/)&|")) {
+		for i < l && !bytein(path[i], []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|'}) {
 			i++
 		}
 		return i, &tToken{Operand: &tOperand{Type: cOpNone, Node: nod}}, nil
 	}
 	// operator
-	if bytein(path[i], []byte(`+-*/`)) {
+	if bytein(path[i], []byte{'+', '-', '*', '/'}) {
 		return i + 1, &tToken{Operator: path[i]}, nil
 	}
 	// compare
@@ -358,7 +358,7 @@ func decodeValue(input []byte, op *tOperand) error {
 	if err != nil {
 		return err
 	}
-	if bytein(input[i], []byte(`"'{[`)) {
+	if bytein(input[i], []byte{'"', '\'', '{', '['}) {
 		// string
 		op.Type = cOpString
 		if input[i] == '"' || input[i] == '\'' { // exclude quotes
