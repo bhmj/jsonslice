@@ -878,7 +878,7 @@ func skipObject(input []byte, i int) (int, error) {
 	instr := false
 	prev := mark
 	i++
-	for i < l && !(input[i] == unmark && nested == 0) {
+	for i < l && !(input[i] == unmark && nested == 0 && !instr) {
 		ch := input[i]
 		if ch == '"' {
 			if prev != '\\' {
