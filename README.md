@@ -207,6 +207,8 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   
 ## Changelog
 
+**0.7.2** (2018-12-25) -- bugfix: closing square bracket inside a string value.
+
 **0.7.1** (2018-10-16) -- bracket notation is now supported.
 > `$.store.book[:]['price','title']` -> `[[8.95,"Sayings of the Century"],[12.99,"Sword of Honour"],[8.99,"Moby Dick"],[22.99,"The Lord of the Rings"]]`
 
