@@ -253,6 +253,27 @@ func Test_Expressions(t *testing.T) {
 	}
 }
 
+func Test_Fixes(t *testing.T) {
+
+	tests := []struct {
+		Data     []byte
+		Query    string
+		Expected []byte
+	}{
+		// closing square bracket inside a string value has been mistakenly taken as an array bound
+		{[]byte(`{"foo":["[]"],"bar":123}`), `$.bar`, []byte(`123`)},
+	}
+
+	for _, tst := range tests {
+		res, err := Get(tst.Data, tst.Query)
+		if err != nil {
+			t.Errorf(tst.Query + " : " + err.Error())
+		} else if compareSlices(res, tst.Expected) != 0 {
+			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(res) + "`")
+		}
+	}
+}
+
 func Test_Errors(t *testing.T) {
 
 	tests := []struct {
