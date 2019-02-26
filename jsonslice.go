@@ -19,7 +19,10 @@ var intSize uintptr
 func init() {
 }
 
-// Get the jsonpath subset of the input
+// Get returns a part of input, matching jsonpath.
+// In terms of allocations there are two cases of retreiving data from the input:
+// 1. (simple case) the result is a simple subslice of a source input.
+// 2. the result is a merge of several non-contiguous parts of input. More allocations are needed.
 func Get(input []byte, path string) ([]byte, error) {
 
 	if len(path) == 0 {

@@ -16,7 +16,9 @@ import (
 func init() {
 }
 
-// GetArrayElements returns a slice of unprocessed elements of an array specified by jsonpath
+// GetArrayElements returns a slice of array elements (in raw, i.e. []byte), matching jsonpath.
+// Note that an array reference must be the only array and the last one in path, for example:
+// "$[:-1]" is ok, "$.foo.bar[:]" is ok, "$.foo[:].bar" is not, "foo[:].bar[:]" is not
 func GetArrayElements(input []byte, path string, alloc int) ([][]byte, error) {
 
 	if len(path) == 0 {
