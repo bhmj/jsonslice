@@ -244,6 +244,10 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.book[?($.store.open < true)].price`, []byte(``)},
 		// escaped chars
 		{`$.store.bicycle.equipment[?(@[0] == "\"quoted\"")]`, []byte(`[["\"quoted\""]]`)},
+		// numbers
+		{`$.store.book[?(20 <= @.price)].title`, []byte(`["The Lord of the Rings"]`)},
+		// numbers (+)
+		{`$.store.book[?(@.price != 22.99)].price`, []byte(`[8.95,12.99,8.99]`)},
 
 		// regexp
 		{`$.store.book[?(@.title =~ /the/i)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
@@ -388,6 +392,16 @@ func Test_ArraySlice(t *testing.T) {
 		Expected [][]byte
 	}{
 		// closing square bracket inside a string value has been mistakenly taken as an array bound
+		{condensed, `$.store.bicycle.equipment[0]`, [][]byte{
+			[]byte(`["paddles", "umbrella", "horn"]`),
+		}},
+		{condensed, `$.store.bicycle.equipment[0,2]`, [][]byte{
+			[]byte(`["paddles", "umbrella", "horn"]`),
+			[]byte(`["light saber", "apparel"]`),
+		}},
+		{condensed, `$.store.bicycle.equipment[-1]`, [][]byte{
+			[]byte(`["\"quoted\""]`),
+		}},
 		{condensed, `$.store.book[:]`, [][]byte{
 			[]byte(`{"category":"reference", "author":"Nigel Rees", "title":"Sayings of the Century", "price":8.95}`),
 			[]byte(`{"category":"fiction", "author":"Evelyn Waugh", "title":"Sword of Honour", "price":12.99}`),
@@ -412,6 +426,52 @@ func Test_ArraySlice(t *testing.T) {
 					t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected[i]) + "`\n\tbut got  `" + string(res[i]) + "`")
 				}
 			}
+		}
+	}
+}
+
+func Test_ArraySlice_Errors(t *testing.T) {
+
+	tests := []struct {
+		Data     []byte
+		Query    string
+		Expected string
+	}{
+		// start with $
+		{data, `foo`, `path: $ expected`},
+		// empty
+		{data, ``, `path: empty`},
+		// unexpected end
+		{data, `$.`, `path: unexpected end of path`},
+		// bad function
+		{data, `$.foo()`, `path: unknown function foo()`},
+
+		// unexpected EOF before :
+		{[]byte(`   `), `$.foo`, `unexpected end of input`},
+		// invalid value format
+		{[]byte(`xxx`), `$.foo`, `object or array expected`},
+
+		// gae() limitations
+		{data, `$.store.*.foo`, `wildcards are not supported in GetArrayElements`},
+		// gae() limitations
+		{data, `$.store.length()`, `functions are not supported in GetArrayElements`},
+		// gae() limitations
+		{data, `$.store.book[:].foo[:]`, `sub-slicing is not supported in GetArrayElements`},
+
+		// array index bounds
+		{condensed, `$.store.bicycle.equipment[5]`, `specified element not found`},
+		// array index bounds
+		{condensed, `$.store.bicycle.equipment[0:5]`, `specified element not found`},
+		// array index bounds
+		{condensed, `$.store.bicycle.equipment[-8]`, `specified element not found`},
+	}
+
+	for _, tst := range tests {
+		_, err := GetArrayElements(tst.Data, tst.Query, 2)
+		if err == nil {
+			t.Errorf(tst.Query + " : error expected")
+		} else if err.Error() != tst.Expected {
+			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(err.Error()) + "`")
 		}
 	}
 }

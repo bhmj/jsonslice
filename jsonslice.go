@@ -614,7 +614,12 @@ func arrayScan(input []byte) ([]tElem, error) {
 }
 
 func getArrayElement(input []byte, i int, nod *tNode) ([]byte, error) {
+	var err error
 	l := len(input)
+	i, err = skipSpaces(input, i)
+	if err != nil {
+		return nil, err
+	}
 	ielem := 0
 	for i < l && input[i] != ']' {
 		e, err := skipValue(input, i)
