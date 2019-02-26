@@ -29,12 +29,14 @@ func main() {
 		return
 	}
 
-	s, err := jsonslice.Get(data, os.Args[1])
+	s, err := jsonslice.GetArrayElements(data, os.Args[1], 20)
 
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	fmt.Println(string(s))
+	for i := 0; i < len(s); i++ {
+		fmt.Println(string(s[i]))
+	}
 }

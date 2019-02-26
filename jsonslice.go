@@ -1,8 +1,8 @@
 package jsonslice
 
 /**
-  JsonSlice 0.3.0
-  Michael Gurov, 2018
+  JsonSlice 0.7.3
+  Michael Gurov, 2018-2019
   MIT licenced
 
   Slice a part of a raw json ([]byte) using jsonpath, without unmarshalling the whole thing.

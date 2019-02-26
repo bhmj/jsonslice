@@ -12,6 +12,7 @@ import (
 )
 
 var data []byte
+var condensed []byte
 
 func init() {
 	data = []byte(`
@@ -47,6 +48,32 @@ func init() {
 						"isbn": "0-395-19395-8",
 						"price": 22.99
 					}
+				],
+				"bicycle": {
+					"color": "red",
+					"price": 19.95,
+					"equipment": [
+						["paddles", "umbrella", "horn"],
+						["peg leg", "parrot", "map"],
+						["light saber", "apparel"],
+						["\"quoted\""]
+					]
+				}
+			},
+			"expensive": 10
+		}
+	`)
+	condensed = []byte(`
+		{
+			"store": {
+				"open": true,
+				"branch": null,
+				"manager": [],
+				"book": [
+					{"category":"reference", "author":"Nigel Rees", "title":"Sayings of the Century", "price":8.95},
+					{"category":"fiction", "author":"Evelyn Waugh", "title":"Sword of Honour", "price":12.99},
+					{"category":"fiction", "author":"Herman Melville", "title": "Moby Dick", "isbn": "0-553-21311-3", "price": 8.99},
+					{"category":"fiction", "author":"J. R. R. Tolkien",	"title":"The Lord of the Rings", "isbn":"0-395-19395-8", "price":22.99}
 				],
 				"bicycle": {
 					"color": "red",
@@ -349,6 +376,42 @@ func Test_Errors(t *testing.T) {
 			t.Errorf(tst.Query + " : error expected")
 		} else if err.Error() != tst.Expected {
 			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(err.Error()) + "`")
+		}
+	}
+}
+
+func Test_ArraySlice(t *testing.T) {
+
+	tests := []struct {
+		Data     []byte
+		Query    string
+		Expected [][]byte
+	}{
+		// closing square bracket inside a string value has been mistakenly taken as an array bound
+		{condensed, `$.store.book[:]`, [][]byte{
+			[]byte(`{"category":"reference", "author":"Nigel Rees", "title":"Sayings of the Century", "price":8.95}`),
+			[]byte(`{"category":"fiction", "author":"Evelyn Waugh", "title":"Sword of Honour", "price":12.99}`),
+			[]byte(`{"category":"fiction", "author":"Herman Melville", "title": "Moby Dick", "isbn": "0-553-21311-3", "price": 8.99}`),
+			[]byte(`{"category":"fiction", "author":"J. R. R. Tolkien",	"title":"The Lord of the Rings", "isbn":"0-395-19395-8", "price":22.99}`),
+		}},
+		{condensed, `$.store.bicycle.equipment[1:3]`, [][]byte{
+			[]byte(`["peg leg", "parrot", "map"]`),
+			[]byte(`["light saber", "apparel"]`),
+		}},
+	}
+
+	for _, tst := range tests {
+		res, err := GetArrayElements(tst.Data, tst.Query, 2)
+		if err != nil {
+			t.Errorf(tst.Query + " : " + err.Error())
+		} else if len(res) != len(tst.Expected) {
+			t.Errorf(tst.Query+" : result length mismatch (%d expected, %d received)", len(tst.Expected), len(res))
+		} else {
+			for i := range res {
+				if compareSlices(res[i], tst.Expected[i]) != 0 {
+					t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected[i]) + "`\n\tbut got  `" + string(res[i]) + "`")
+				}
+			}
 		}
 	}
 }
