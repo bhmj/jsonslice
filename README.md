@@ -42,6 +42,14 @@ func main() {
 }
 ```
 
+## Package functions
+  
+`jsonslice.Get(data []byte, jsonpath string) ([]byte, error)`  
+  - get a slice from raw json data specified by jsonpath
+
+`jsonslice.GetArrayElements(data []byte, jsonpath string, alloc int) ([][]byte, error)`
+  - get a slice of array elements from raw json data specified by jsonpath
+
 ## Benchmarks (Core i5-7500)
 
 ```diff
@@ -206,6 +214,8 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   More examples can be found in `jsonslice_test.go`  
   
 ## Changelog
+
+**0.7.3** (2019-02-27) -- `GetArrayElements()` added.
 
 **0.7.2** (2018-12-25) -- bugfix: closing square bracket inside a string value.
 
