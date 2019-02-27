@@ -13,58 +13,6 @@ import (
 
 var data []byte
 var condensed []byte
-var catalog []byte
-
-type PriceEl struct {
-	Price                  int
-	Sale                   int
-	BrandPromoSale         int
-	priceSaleFixed         int64
-	priceSaleCouponFixed   int64
-	priceSaleDiscountFixed int64
-}
-
-type Rule struct {
-	ID                 int
-	PayDiscountEnabled bool
-	ExtraDiscount      int
-	LimitDiscount      *int
-	OnlyRegister       bool
-}
-
-type Product struct {
-	ItemID          int
-	Quantity        int
-	Onstock         int
-	Subject         Rule
-	Brand           Rule
-	PriceRule       Rule
-	Groups          []int
-	Promos          []int
-	Warehouses      []int
-	AllowCoupon     bool
-	AllowSale       bool
-	Bonus           float64 // comes from site -- POO bonus
-	DenomBonus      float64 // not used at the moment
-	BonusPercent    int     // from get_promo_info
-	CardsPrice      PriceEl
-	NoDiscounts     bool
-	PooSaleDisabled bool
-	PriceEl
-}
-
-type CatalogOfferRequest struct {
-	Products         []Product
-	Country          string
-	Longitude        float32
-	Latitude         float32
-	AppType          int
-	Condition        string
-	PersonalDiscount int
-	WbUserID         int
-	IsWB             bool
-	DeliveryType     int
-}
 
 func init() {
 	data = []byte(`
@@ -141,29 +89,6 @@ func init() {
 			"expensive": 10
 		}
 	`)
-
-	catalog = []byte(
-		`"IsWB": false,
-		"IsCash": true,
-		"Country": "by",
-		"PtSale": 0,
-		"PooSale": 0,
-		"PersonalDiscount": 15,
-		"AppType": 1,
-		"Latitude": 55.753215,
-		"Longitude": 37.622504,
-		"CityId": 0,
-		"PaymentDeliveryTypeMap": -1,
-		"DeliveryType": 1,
-		"Bonus": 0,
-		"Products": ['`,
-	)
-	for i := 0; i < 100; i++ {
-		catalog = append(catalog,
-			[]byte(`{"ItemId":14403148,"Quantity":3,"OnStock":4,"Price":258779,"Sale":30,"AllowSale":true,"AllowCoupon":true,"groups":[27941,27932,24586,27097,27092],"promos":[71319,71288,71277,71215,71023,69537,69529,69468,69445,63484,62705],"Brand":{"Id":19038},"Subject":{"Id":207},"Warehouses":[507],"NoDiscounts":false},`)...,
-		)
-	}
-	catalog = append(catalog, []byte(`{"ItemId":14403148,"Quantity":3,"OnStock":4,"Price":258779,"Sale":30,"AllowSale":true,"AllowCoupon":true,"groups":[27941,27932,24586,27097,27092],"promos":[71319,71288,71277,71215,71023,69537,69529,69468,69445,63484,62705],"Brand":{"Id":19038},"Subject":{"Id":207},"Warehouses":[507],"NoDiscounts":false}]}`)...)
 }
 
 func randomBytes(p []byte, min, max int) {
@@ -548,73 +473,6 @@ func Test_ArraySlice_Errors(t *testing.T) {
 		} else if err.Error() != tst.Expected {
 			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(err.Error()) + "`")
 		}
-	}
-}
-
-func Benchmark_UnmarshalStandard(b *testing.B) {
-	var body CatalogOfferRequest
-	for i := 0; i < b.N; i++ {
-		json.Unmarshal(catalog, &body)
-	}
-}
-
-func Benchmark_UnmarshalParallel(b *testing.B) {
-	//var body CatalogOfferRequest
-
-	//maxRoutines := 10
-
-	for i := 0; i < b.N; i++ {
-
-		input := make(chan []byte, 100)
-		//output := make(chan *Product, 100)
-		//wg := sync.WaitGroup{}
-
-		items, _ := GetArrayElements(catalog, "$.Products[:]", 100)
-		for _, item := range items {
-			input <- item
-		}
-		close(input)
-		/*
-			for i := 0; i < maxRoutines; i++ {
-				wg.Add(1)
-				go func(inp chan []byte, out chan *Product) {
-					for v := range inp {
-						p := new(Product)
-						json.Unmarshal(v, p)
-						out <- p
-					}
-					wg.Done()
-				}(input, output)
-			}
-
-			v, _ := Get(catalog, "$.Country")
-			json.Unmarshal(v, &body.Country)
-			v, _ = Get(catalog, "$.Longitude")
-			json.Unmarshal(v, &body.Longitude)
-			v, _ = Get(catalog, "$.Latitude")
-			json.Unmarshal(v, &body.Latitude)
-			v, _ = Get(catalog, "$.AppType")
-			json.Unmarshal(v, &body.AppType)
-			v, _ = Get(catalog, "$.Condition")
-			json.Unmarshal(v, &body.Condition)
-			v, _ = Get(catalog, "$.PersonalDiscount")
-			json.Unmarshal(v, &body.PersonalDiscount)
-			v, _ = Get(catalog, "$.WbUserID")
-			json.Unmarshal(v, &body.WbUserID)
-			v, _ = Get(catalog, "$.IsWB")
-			json.Unmarshal(v, &body.IsWB)
-			v, _ = Get(catalog, "$.DeliveryType")
-			json.Unmarshal(v, &body.DeliveryType)
-
-			go func() {
-				wg.Wait()
-				close(output)
-			}()
-
-			for p := range output {
-				body.Products = append(body.Products, *p)
-			}
-		*/
 	}
 }
 

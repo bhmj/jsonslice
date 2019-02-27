@@ -55,7 +55,7 @@ func Get(input []byte, path string) ([]byte, error) {
 		return nil, errors.New("path: empty")
 	}
 
-	if string(path) == `$` {
+	if len(path) == 1 && path[0] == '$' {
 		return input, nil
 	}
 
