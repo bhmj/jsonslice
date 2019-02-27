@@ -10,13 +10,39 @@ package jsonslice
 **/
 
 import (
+	"bytes"
 	"errors"
 	"strconv"
+	"sync"
 )
 
-var intSize uintptr
+var (
+	nodePool sync.Pool
+)
 
 func init() {
+	nodePool = sync.Pool{
+		New: func() interface{} {
+			return &tNode{
+				Keys:  make([]word, 0),
+				Elems: make([]int, 0),
+			}
+		},
+	}
+}
+
+func getEmptyNode() *tNode {
+	nod := nodePool.Get().(*tNode)
+	nod.Elems = nod.Elems[:0]
+	nod.Exists = false
+	nod.Filter = nil
+	nod.Key = nod.Key[:0]
+	nod.Keys = nod.Keys[:0]
+	nod.Left = 0
+	nod.Next = nil
+	nod.Right = 0
+	nod.Type = 0
+	return nod
 }
 
 // Get returns a part of input, matching jsonpath.
@@ -50,7 +76,7 @@ func Get(input []byte, path string) ([]byte, error) {
 		}
 		if n.Filter != nil {
 			for _, tok := range n.Filter.toks {
-				if tok.Operand != nil && tok.Operand.Node != nil && tok.Operand.Node.Key == "$" {
+				if tok.Operand != nil && tok.Operand.Node != nil && len(tok.Operand.Node.Key) == 1 && tok.Operand.Node.Key[0] == '$' {
 					val, err := getValue(input, tok.Operand.Node)
 					if err != nil {
 						// not found or other error
@@ -63,7 +89,19 @@ func Get(input []byte, path string) ([]byte, error) {
 		}
 	}
 
-	return getValue(input, node)
+	result, err := getValue(input, node)
+
+	// return nodes back to pool
+	for {
+		if node == nil {
+			break
+		}
+		p := node.Next
+		nodePool.Put(node)
+		node = p
+	}
+
+	return result, err
 }
 
 const (
@@ -76,10 +114,11 @@ const (
 	cDeep        = 1 << iota // deepscan
 )
 
+type word []byte
+
 type tNode struct {
-	Base   byte // $ or @
-	Key    string
-	Keys   []string
+	Key    word
+	Keys   []word
 	Type   int // properties
 	Left   int // >=0 index from the start, <0 backward index from the end
 	Right  int // 0 till the end inclusive, >0 to index exclusive, <0 backward index from the end exclusive
@@ -89,6 +128,7 @@ type tNode struct {
 	Exists bool
 }
 
+// returns true if b matches one of the elements of seq
 func bytein(b byte, seq []byte) bool {
 	for i := 0; i < len(seq); i++ {
 		if b == seq[i] {
@@ -98,40 +138,53 @@ func bytein(b byte, seq []byte) bool {
 	return false
 }
 
+var keyTerminator = []byte{' ', '\t', '.', '[', '(', ')', ']', '<', '=', '>', '+', '-', '*', '/', '&', '|'}
+
+// parse jsonpath and return a root of a linked list of nodes
 func parsePath(path []byte) (*tNode, error) {
 	var err error
 	var done bool
-	nod := &tNode{}
+	var nod *tNode
+
 	i := 0
 	l := len(path)
 
 	if l == 0 {
 		return nil, errors.New("path: unexpected end of path")
 	}
+
+	//	if path[0] != '$' && path[0] != 's' {
+	//		return getEmptyNode(), nil
+	//	}
 	// get key
 	if path[i] == '*' {
 		i++
 	} else {
-		for ; i < l && !bytein(path[i], []byte{' ', '\t', '.', '[', '(', ')', ']', '<', '=', '>', '+', '-', '*', '/', '&', '|'}); i++ {
+		for ; i < l && !bytein(path[i], keyTerminator); i++ {
 		}
 	}
-	nod.Key = string(path[:i])
 
+	nod = getEmptyNode()
+	nod.Key = path[:i]
+
+	//	if path[0] == 's' {
+	//		return getEmptyNode(), nil
+	//	}
 	if i == l {
 		// finished parsing
 		nod.Type |= cIsTerminal
 		return nod, nil
 	}
 
-	// get node type
+	// get node type and also get Keys if specified
 	done, i, err = nodeType(path, i, nod)
-	if nod.Key == "" && len(nod.Keys) == 1 {
+	if len(nod.Key) == 0 && len(nod.Keys) == 1 {
 		nod.Key = nod.Keys[0]
 		nod.Keys = nil
 	}
-	if nod.Key != "" && len(nod.Keys) > 0 {
+	if len(nod.Key) != 0 && len(nod.Keys) > 0 {
 		mid := nod
-		nod := &tNode{}
+		nod := getEmptyNode()
 		nod.Keys = mid.Keys
 		nod.Type = mid.Type
 		mid.Type = mid.Type & (^cIsTerminal)
@@ -152,6 +205,8 @@ func parsePath(path []byte) (*tNode, error) {
 	return nod, nil
 }
 
+var pathTerminator = []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|'}
+
 func nodeType(path []byte, i int, nod *tNode) (bool, int, error) {
 	var err error
 	l := len(path)
@@ -169,7 +224,7 @@ func nodeType(path []byte, i int, nod *tNode) (bool, int, error) {
 		}
 	}
 	ch := path[i]
-	if bytein(ch, []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|'}) {
+	if bytein(ch, pathTerminator) {
 		nod.Type |= cIsTerminal
 		return true, i, nil
 	}
@@ -189,12 +244,10 @@ func nodeType(path []byte, i int, nod *tNode) (bool, int, error) {
 }
 
 func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
-	switch nod.Key {
-	case "length":
-	case "count":
-	case "size":
-	default:
-		return true, i, errors.New("path: unknown function " + nod.Key + "()")
+	if !(bytes.EqualFold(nod.Key, []byte("length")) ||
+		bytes.EqualFold(nod.Key, []byte("count")) ||
+		bytes.EqualFold(nod.Key, []byte("size"))) {
+		return true, i, errors.New("path: unknown function")
 	}
 	nod.Type |= cFunction
 	i += 2
@@ -209,7 +262,7 @@ func parseArrayIndex(path []byte, i int, nod *tNode) (int, error) {
 	var err error
 	i++ // [
 	if i < l && path[i] == '\'' {
-		return parseFieldArray(path, i, nod)
+		return parseKeyList(path, i, nod)
 	}
 	nod.Type = cArrayType
 	if i < l-1 && path[i] == '?' && path[i+1] == '(' {
@@ -237,7 +290,7 @@ func parseArrayIndex(path []byte, i int, nod *tNode) (int, error) {
 	return i, nil
 }
 
-func parseFieldArray(path []byte, i int, nod *tNode) (int, error) {
+func parseKeyList(path []byte, i int, nod *tNode) (int, error) {
 	l := len(path)
 	// now at '
 	for i < l && path[i] != ']' {
@@ -248,7 +301,7 @@ func parseFieldArray(path []byte, i int, nod *tNode) (int, error) {
 		if e == l {
 			return i, errors.New("path: key list terminated unexpectedly")
 		}
-		nod.Keys = append(nod.Keys, string(path[i:e]))
+		nod.Keys = append(nod.Keys, path[i:e])
 		i = e + 1 // skip '
 		for ; i < l && path[i] != '\'' && path[i] != ']'; i++ {
 		} // sek to next ' or ]
@@ -306,10 +359,10 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 		return nil, errors.New("object or array expected")
 	}
 	// wildcard
-	if nod.Key == "*" {
+	if nod.Key != nil && len(nod.Key) == 1 && nod.Key[0] == '*' {
 		return wildScan(input, nod)
 	}
-	if nod.Key != "$" && nod.Key != "@" && (nod.Key != "" || len(nod.Keys) > 0) {
+	if len(nod.Keys) > 0 || (len(nod.Key) > 0 && nod.Key[0] != '$' && nod.Key[0] != '@') {
 		// find the key and seek to the value
 		input, err = getKeyValue(input, nod)
 		if err != nil {
@@ -502,14 +555,14 @@ func getKeyValue(input []byte, nod *tNode) ([]byte, error) {
 		}
 		return append(ret, ']'), nil
 	}
-	return nil, errors.New(`field "` + nod.Key + `" not found`)
+	return nil, errors.New(`field not found`)
 }
 
 func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte) (bool, int, error) {
 	var e int
 	var err error
 
-	if nod.Key == string(key) || nod.Key == "*" {
+	if bytes.EqualFold(nod.Key, key) || (len(nod.Key) == 1 && nod.Key[0] == '*') {
 		return true, i, nil // single key hit
 	}
 
@@ -524,7 +577,7 @@ func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte) (bool
 	}
 
 	for ii, k := range nod.Keys {
-		if k == string(key) {
+		if bytes.EqualFold(k, key) {
 			elems[ii] = input[s:e]
 			return false, i, nil
 		}
@@ -541,7 +594,7 @@ type tElem struct {
 // sliceArray select node(s) by bound(s)
 func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 	if input[0] != '[' {
-		return nil, errors.New("array expected at " + nod.Key)
+		return nil, errors.New("array expected")
 	}
 	i := 1 // skip '['
 
@@ -782,9 +835,9 @@ func checkValueType(input []byte, nod *tNode) error {
 	}
 	ch := input[0]
 	if nod.Type&cArrayType == 0 && ch != '{' {
-		return errors.New("object expected at " + nod.Key)
+		return errors.New("object expected")
 	} else if nod.Type&cArrayType > 0 && ch != '[' {
-		return errors.New("array expected at " + nod.Key)
+		return errors.New("array expected")
 	}
 	return nil
 }
@@ -792,12 +845,9 @@ func checkValueType(input []byte, nod *tNode) error {
 func doFunc(input []byte, nod *tNode) ([]byte, error) {
 	var err error
 	var result int
-	switch nod.Key {
-	case "size":
+	if bytes.Equal(word("size"), nod.Key) {
 		result, err = skipValue(input, 0)
-	case "length":
-		fallthrough
-	case "count":
+	} else if bytes.Equal(word("length"), nod.Key) || bytes.Equal(word("count"), nod.Key) {
 		if input[0] == '"' {
 			result, err = skipString(input, 0)
 		} else if input[0] == '[' {
