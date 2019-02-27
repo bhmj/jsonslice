@@ -519,7 +519,7 @@ func Test_ArraySlice_Errors(t *testing.T) {
 		// unexpected end
 		{data, `$.`, `path: unexpected end of path`},
 		// bad function
-		{data, `$.foo()`, `path: unknown function foo()`},
+		{data, `$.foo()`, `path: unknown function`},
 
 		// unexpected EOF before :
 		{[]byte(`   `), `$.foo`, `unexpected end of input`},
