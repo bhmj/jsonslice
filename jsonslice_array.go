@@ -1,7 +1,7 @@
 package jsonslice
 
 /**
-  JsonSlice 0.7.3
+  JsonSlice 0.7.4
   Michael Gurov, 2018-2019
   MIT licenced
 

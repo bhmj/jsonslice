@@ -217,6 +217,8 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   
 ## Changelog
 
+**0.7.4** (2019-03-01) -- Mallocs reduced (see Benchmarks section).
+
 **0.7.3** (2019-02-27) -- `GetArrayElements()` added.
 
 **0.7.2** (2018-12-25) -- bugfix: closing square bracket inside a string value.
