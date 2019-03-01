@@ -87,7 +87,7 @@ See [Stefan Gössner's article](http://goessner.net/articles/JsonPath/index.html
 
 2. A single index reference returns an element, not an array:  
 ```
-./jsonslice sample0.json $.store.book[0]
+./jsonslice '$.store.book[0]' sample0.json
 ```
 returns  
 ```
