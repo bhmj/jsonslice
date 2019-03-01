@@ -100,7 +100,7 @@ returns
 ```
 while this query
 ```
-./jsonslice sample0.json $.store.book[0:1]
+./jsonslice '$.store.book[0:1]' sample0.json
 ```
 returns an array 
 ```
@@ -114,7 +114,7 @@ returns an array
 
 Also, indexing on root node is supported (assuming json is an array and not an object):  
 ```
-./jsonslice sample1.json $[0].author
+./jsonslice '$[0].author' sample1.json
 ```
 
 ## Expressions
