@@ -319,13 +319,13 @@ func Test_Errors(t *testing.T) {
 		// unexpected EOF after :
 		{[]byte(`{"foo" : `), `$.foo`, `unexpected end of input`},
 		// wrong type
-		{[]byte(`{"foo" : "bar"`), `$.foo[0]`, `array expected at foo`},
+		{[]byte(`{"foo" : "bar"`), `$.foo[0]`, `array expected`},
 		// wrong type
-		{[]byte(`{"foo" : "bar"`), `$.foo[0].bar`, `array expected at foo`},
+		{[]byte(`{"foo" : "bar"`), `$.foo[0].bar`, `array expected`},
 		// wrong type
-		{[]byte(`{"foo" : "bar"`), `$.foo.bar`, `object expected at foo`},
+		{[]byte(`{"foo" : "bar"`), `$.foo.bar`, `object expected`},
 		// wrong type
-		{[]byte(`["foo" : ("bar")]`), `$.foo.bar`, `object expected at $`},
+		{[]byte(`["foo" : ("bar")]`), `$.foo.bar`, `object expected`},
 
 		// start with $
 		{data, `foo`, `path: $ expected`},
@@ -334,7 +334,7 @@ func Test_Errors(t *testing.T) {
 		// unexpected end
 		{data, `$.`, `path: unexpected end of path`},
 		// bad function
-		{data, `$.foo()`, `path: unknown function foo()`},
+		{data, `$.foo()`, `path: unknown function`},
 
 		// array: index bound missing
 		{data, `$.store.book[1`, `path: index bound missing`},
@@ -444,7 +444,7 @@ func Test_ArraySlice_Errors(t *testing.T) {
 		// unexpected end
 		{data, `$.`, `path: unexpected end of path`},
 		// bad function
-		{data, `$.foo()`, `path: unknown function foo()`},
+		{data, `$.foo()`, `path: unknown function`},
 
 		// unexpected EOF before :
 		{[]byte(`   `), `$.foo`, `unexpected end of input`},
@@ -498,8 +498,28 @@ func Benchmark_Oliveagle_Jsonpath(b *testing.B) {
 }
 
 func Benchmark_JsonSlice_ParsePath(b *testing.B) {
+	b.StopTimer()
+	path := []byte("$.store.book.thule.foo.bar")
+	nodePool.Put(nodePool.Get())
+	nodePool.Put(nodePool.Get())
+	nodePool.Put(nodePool.Get())
+	nodePool.Put(nodePool.Get())
+	nodePool.Put(nodePool.Get())
+	nodePool.Put(nodePool.Get())
+	nodePool.Put(nodePool.Get())
+	nodePool.Put(nodePool.Get())
+	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = parsePath([]byte("$.store.book[3].title"))
+		node, _ := parsePath(path)
+		// return nodes back to pool
+		for {
+			if node == nil {
+				break
+			}
+			p := node.Next
+			nodePool.Put(node)
+			node = p
+		}
 	}
 }
 

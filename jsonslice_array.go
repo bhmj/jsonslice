@@ -42,7 +42,7 @@ func GetArrayElements(input []byte, path string, alloc int) ([][]byte, error) {
 		}
 		if n.Filter != nil {
 			for _, tok := range n.Filter.toks {
-				if tok.Operand != nil && tok.Operand.Node != nil && tok.Operand.Node.Key == "$" {
+				if tok.Operand != nil && tok.Operand.Node != nil && len(tok.Operand.Node.Key) == 1 && tok.Operand.Node.Key[0] == '$' {
 					val, err := getValue(input, tok.Operand.Node)
 					if err != nil {
 						// not found or other error
@@ -70,10 +70,10 @@ func getValueAE(input []byte, nod *tNode, alloc int) (result [][]byte, err error
 		return nil, errors.New("object or array expected")
 	}
 	// wildcard
-	if nod.Key == "*" {
+	if len(nod.Key) == 1 && nod.Key[0] == '*' {
 		return nil, errors.New("wildcards are not supported in GetArrayElements")
 	}
-	if nod.Key != "$" && nod.Key != "@" && (nod.Key != "" || len(nod.Keys) > 0) {
+	if len(nod.Keys) > 0 || (len(nod.Key) > 0 && nod.Key[0] != '$' && nod.Key[0] != '@') {
 		// find the key and seek to the value
 		input, err = getKeyValue(input, nod)
 		if err != nil {
@@ -110,7 +110,7 @@ func getValueAE(input []byte, nod *tNode, alloc int) (result [][]byte, err error
 // sliceArrayElements returns a slice of array elements
 func sliceArrayElements(input []byte, nod *tNode, alloc int) ([][]byte, error) {
 	if input[0] != '[' {
-		return nil, errors.New("array expected at " + nod.Key)
+		return nil, errors.New("array expected")
 	}
 	i := 1 // skip '['
 
