@@ -63,8 +63,21 @@ func Get(input []byte, path string) ([]byte, error) {
 		return nil, errors.New("path: $ expected")
 	}
 
+	repool := func(node *tNode) {
+		// return nodes back to pool
+		for {
+			if node == nil {
+				break
+			}
+			p := node.Next
+			nodePool.Put(node)
+			node = p
+		}
+	}
+
 	node, err := parsePath([]byte(path))
 	if err != nil {
+		repool(node)
 		return nil, err
 	}
 
@@ -91,16 +104,7 @@ func Get(input []byte, path string) ([]byte, error) {
 
 	result, err := getValue(input, node)
 
-	// return nodes back to pool
-	for {
-		if node == nil {
-			break
-		}
-		p := node.Next
-		nodePool.Put(node)
-		node = p
-	}
-
+	repool(node)
 	return result, err
 }
 

@@ -58,21 +58,23 @@ goos: linux
 goarch: amd64
 pkg: github.com/bhmj/jsonslice
 ++ here's a couple of operations usually needed to get an object by jsonpath (for reference):
-Benchmark_Unmarshal-4                     500000             15237 ns/op            4496 B/op        130 allocs/op
-Benchmark_Oliveagle_Jsonpath-4           3000000              1943 ns/op             608 B/op         48 allocs/op
-++ here's a couple of operations needed to get a jsonslice:
-Benchmark_JsonSlice_ParsePath-4         10000000               775 ns/op             560 B/op          9 allocs/op
-Benchmark_Jsonslice_Get-4                2000000              2922 ns/op             560 B/op          9 allocs/op
+Benchmark_Unmarshal-4                     500000             15487 ns/op            4496 B/op        130 allocs/op
+Benchmark_Oliveagle_Jsonpath-4           3000000              1981 ns/op             608 B/op         48 allocs/op
+++ and here's a jsonslice.Get:
+Benchmark_Jsonslice_Get-4                2000000              2840 ns/op              32 B/op          1 allocs/op
+++ Get() involves parsing a jsonpath, here it is:
+Benchmark_JsonSlice_ParsePath-4         10000000               579 ns/op               0 B/op          0 allocs/op
 ++ in case you aggregate some non-contiguous elements, it may take a bit longer (extra mallocs involved):
-Benchmark_Jsonslice_Get_Aggregated-4     1000000              6843 ns/op            2736 B/op         19 allocs/op
+Benchmark_Jsonslice_Get_Aggregated-4     1000000              5853 ns/op            2178 B/op         10 allocs/op
 ++ unmarshalling a large json:
-Benchmark_Unmarshal_10Mb-4                   100          50670015 ns/op             376 B/op          5 allocs/op
+Benchmark_Unmarshal_10Mb-4                   100          47716510 ns/op             376 B/op          5 allocs/op
 ++ jsonslicing the same json, target element is near the start:
-Benchmark_Jsonslice_Get_10Mb_First-4     5000000              1464 ns/op             560 B/op          9 allocs/op
+Benchmark_Jsonslice_Get_10Mb_First-4     5000000              1312 ns/op              32 B/op          1 allocs/op
 ++ jsonslicing the same json, target element is near the end: still beats Unmarshal
-Benchmark_Jsonslice_Get_10Mb_Last-4          200          33645022 ns/op             560 B/op          9 allocs/op
+Benchmark_Jsonslice_Get_10Mb_Last-4          200          29554432 ns/op              37 B/op          1 allocs/op
 PASS
-ok      github.com/bhmj/jsonslice       78.769s
+ok      github.com/bhmj/jsonslice       71.377s
+
 ```
 
 ## Specs
