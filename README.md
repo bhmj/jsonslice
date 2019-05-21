@@ -30,9 +30,9 @@ import "fmt"
 func main() {
 	var data = []byte(`
 	{ "sku": [ 
-			{ "id": 1, "name": "Bicycle", "price": 160, "extras": [ "flashlight", "pump" ] },
-			{ "id": 2, "name": "Scooter", "price": 280, "extras": [ "helmet", "gloves", "spare wheel" ] }
-		]
+	    { "id": 1, "name": "Bicycle", "price": 160, "extras": [ "flashlight", "pump" ] },
+	    { "id": 2, "name": "Scooter", "price": 280, "extras": [ "helmet", "gloves", "spare wheel" ] }
+	  ]
 	} `)
 
 	a, _ := jsonslice.Get(data, "$.sku[0].price")
