@@ -9,10 +9,6 @@ package jsonslice
   The result is also []byte.
 **/
 
-import (
-	"errors"
-)
-
 func init() {
 }
 
@@ -22,14 +18,14 @@ func init() {
 func GetArrayElements(input []byte, path string, alloc int) ([][]byte, error) {
 
 	if len(path) == 0 {
-		return nil, errors.New("path: empty")
+		return nil, errPathEmpty
 	}
 
 	if path[0] != '$' {
-		return nil, errors.New("path: $ expected")
+		return nil, errPathRootExpected
 	}
 
-	node, err := parsePath([]byte(path))
+	node, _, err := parsePath([]byte(path))
 	if err != nil {
 		return nil, err
 	}
@@ -63,20 +59,16 @@ func getValueAE(input []byte, nod *tNode, alloc int) (result [][]byte, err error
 	i, _ := skipSpaces(input, 0)
 
 	input = input[i:]
-	if len(input) == 0 {
-		return nil, errors.New("unexpected end of input")
-	}
-	if !bytein(input[0], []byte{'{', '['}) {
-		return nil, errors.New("object or array expected")
+	if err = looksLikeJSON(input); err != nil {
+		return nil, err
 	}
 	// wildcard
 	if len(nod.Key) == 1 && nod.Key[0] == '*' {
-		return nil, errors.New("wildcards are not supported in GetArrayElements")
+		return nil, errWildcardsNotSupported
 	}
-	if len(nod.Keys) > 0 || (len(nod.Key) > 0 && nod.Key[0] != '$' && nod.Key[0] != '@') {
+	if len(nod.Keys) > 0 || (len(nod.Key) > 0 && !bytein(nod.Key[0], []byte{'$', '@'})) {
 		// find the key and seek to the value
-		input, err = getKeyValue(input, nod)
-		if err != nil {
+		if input, err = getKeyValue(input, nod); err != nil {
 			return nil, err
 		}
 	}
@@ -88,20 +80,20 @@ func getValueAE(input []byte, nod *tNode, alloc int) (result [][]byte, err error
 	// here we are at the beginning of a value
 
 	if nod.Type&cSubject > 0 {
-		return nil, errors.New("functions are not supported in GetArrayElements")
+		return nil, errFunctionsNotSupported
 	}
 	if nod.Type&cIsTerminal > 0 {
 		if nod.Type&cArrayType == 0 {
-			return nil, errors.New("functions are not supported in GetArrayElements")
+			return nil, errTerminalNodeArray
 		}
 		return sliceArrayElements(input, nod, alloc)
 	}
 	if nod.Type&cArrayType > 0 {
+		if nod.Type&cAgg > 0 {
+			return nil, errSubslicingNotSupported
+		}
 		if input, err = sliceArray(input, nod); err != nil {
 			return nil, err
-		}
-		if nod.Type&cAgg > 0 {
-			return nil, errors.New("sub-slicing is not supported in GetArrayElements")
 		}
 	}
 	return getValueAE(input, nod.Next, alloc)
@@ -110,7 +102,7 @@ func getValueAE(input []byte, nod *tNode, alloc int) (result [][]byte, err error
 // sliceArrayElements returns a slice of array elements
 func sliceArrayElements(input []byte, nod *tNode, alloc int) ([][]byte, error) {
 	if input[0] != '[' {
-		return nil, errors.New("array expected")
+		return nil, errArrayExpected
 	}
 	i := 1 // skip '['
 
@@ -146,7 +138,7 @@ func sliceArrayElements(input []byte, nod *tNode, alloc int) ([][]byte, error) {
 	if nod.Type&cArrayRanged == 0 {
 		a := nod.Left + len(elems) // nod.Left is negative, so correct it to a real element index
 		if a < 0 {
-			return nil, errors.New("specified element not found")
+			return nil, errArrayElementNotFound
 		}
 
 		return append(res, input[elems[a].start:elems[a].end]), nil

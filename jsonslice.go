@@ -18,6 +18,39 @@ import (
 
 var (
 	nodePool sync.Pool
+
+	errPathEmpty,
+	errPathRootExpected,
+	errPathUnexpectedEnd,
+	errPathInvalidReference,
+	errPathUnknownFunction,
+	errPathIndexBoundMissing,
+	errPathKeyListTerminated,
+	errPathIndexNonsense,
+	errArrayElementNotFound,
+	errFieldNotFound,
+	errArrayExpected,
+	errColonExpected,
+	errUnrecognizedValue,
+	errUnexpectedEnd,
+	errObjectExpected,
+	errInvalidLengthUsage,
+	errObjectOrArrayExpected,
+	errWildcardsNotSupported,
+	errFunctionsNotSupported,
+	errTerminalNodeArray,
+	errSubslicingNotSupported,
+	errUnexpectedEOT,
+	errUnknownToken,
+	errUnexpectedStringEnd,
+	errInvalidBoolean,
+	errEmptyFilter,
+	errNotEnoughArguments,
+	errUnknownOperator,
+	errInvalidArithmetic,
+	errInvalidRegexp,
+	errOperandTypes,
+	errInvalidOperatorStrings error
 )
 
 func init() {
@@ -29,6 +62,39 @@ func init() {
 			}
 		},
 	}
+
+	errPathEmpty = errors.New("path: empty")
+	errPathRootExpected = errors.New("path: $ expected")
+	errPathUnexpectedEnd = errors.New("path: unexpected end of path")
+	errPathInvalidReference = errors.New("path: invalid element reference")
+	errPathUnknownFunction = errors.New("path: unknown function")
+	errPathIndexBoundMissing = errors.New("path: index bound missing")
+	errPathKeyListTerminated = errors.New("path: key list terminated unexpectedly")
+	errPathIndexNonsense = errors.New("path: 0 as a second bound does not make sense")
+	errArrayElementNotFound = errors.New(`specified array element not found`)
+	errFieldNotFound = errors.New(`field not found`)
+	errColonExpected = errors.New("':' expected")
+	errUnrecognizedValue = errors.New("unrecognized value: true, false or null expected")
+	errUnexpectedEnd = errors.New("unexpected end of input")
+	errObjectExpected = errors.New("object expected")
+	errArrayExpected = errors.New("array expected")
+	errInvalidLengthUsage = errors.New("length() is only applicable to array or string")
+	errObjectOrArrayExpected = errors.New("object or array expected")
+	errWildcardsNotSupported = errors.New("wildcards are not supported in GetArrayElements")
+	errFunctionsNotSupported = errors.New("functions are not supported in GetArrayElements")
+	errTerminalNodeArray = errors.New("terminal node must be an array")
+	errSubslicingNotSupported = errors.New("sub-slicing is not supported in GetArrayElements")
+	errUnexpectedEOT = errors.New("unexpected end of token")
+	errUnknownToken = errors.New("unknown token")
+	errUnexpectedStringEnd = errors.New("unexpected end of string")
+	errInvalidBoolean = errors.New("invalid boolean value")
+	errEmptyFilter = errors.New("empty filter")
+	errNotEnoughArguments = errors.New("not enough arguments")
+	errUnknownOperator = errors.New("unknown operator")
+	errInvalidArithmetic = errors.New("invalid operands for arithmetic operator")
+	errInvalidRegexp = errors.New("invalid operands for regexp match")
+	errOperandTypes = errors.New("operand types do not match")
+	errInvalidOperatorStrings = errors.New("operator is not applicable to strings")
 }
 
 func getEmptyNode() *tNode {
@@ -52,7 +118,7 @@ func getEmptyNode() *tNode {
 func Get(input []byte, path string) ([]byte, error) {
 
 	if len(path) == 0 {
-		return nil, errors.New("path: empty")
+		return nil, errPathEmpty
 	}
 
 	if len(path) == 1 && path[0] == '$' {
@@ -60,25 +126,13 @@ func Get(input []byte, path string) ([]byte, error) {
 	}
 
 	if path[0] != '$' {
-		return nil, errors.New("path: $ expected")
+		return nil, errPathRootExpected
 	}
 
-	repool := func(node *tNode) {
-		// return nodes back to pool
-		for {
-			if node == nil {
-				break
-			}
-			p := node.Next
-			nodePool.Put(node)
-			node = p
-		}
-	}
-
-	node, err := parsePath([]byte(path))
+	node, i, err := parsePath([]byte(path))
 	if err != nil {
 		repool(node)
-		return nil, err
+		return nil, errors.New(err.Error() + " at " + strconv.Itoa(i))
 	}
 
 	n := node
@@ -145,7 +199,7 @@ func bytein(b byte, seq []byte) bool {
 var keyTerminator = []byte{' ', '\t', '.', '[', '(', ')', ']', '<', '=', '>', '+', '-', '*', '/', '&', '|'}
 
 // parse jsonpath and return a root of a linked list of nodes
-func parsePath(path []byte) (*tNode, error) {
+func parsePath(path []byte) (*tNode, int, error) {
 	var err error
 	var done bool
 	var nod *tNode
@@ -154,12 +208,9 @@ func parsePath(path []byte) (*tNode, error) {
 	l := len(path)
 
 	if l == 0 {
-		return nil, errors.New("path: unexpected end of path")
+		return nil, i, errPathUnexpectedEnd
 	}
 
-	//	if path[0] != '$' && path[0] != 's' {
-	//		return getEmptyNode(), nil
-	//	}
 	// get key
 	if path[i] == '*' {
 		i++
@@ -171,13 +222,10 @@ func parsePath(path []byte) (*tNode, error) {
 	nod = getEmptyNode()
 	nod.Key = path[:i]
 
-	//	if path[0] == 's' {
-	//		return getEmptyNode(), nil
-	//	}
 	if i == l {
 		// finished parsing
 		nod.Type |= cIsTerminal
-		return nod, nil
+		return nod, i, nil
 	}
 
 	// get node type and also get Keys if specified
@@ -195,18 +243,19 @@ func parsePath(path []byte) (*tNode, error) {
 		mid.Next = nod
 	}
 	if done || err != nil {
-		return nod, err
+		return nod, i, err
 	}
 
-	next, err := parsePath(path[i:])
+	next, j, err := parsePath(path[i:])
+	i += j
 	if err != nil {
-		return nil, err
+		return nil, i, err
 	}
 	nod.Next = next
 	if next.Type&cFunction > 0 {
 		nod.Type |= cSubject
 	}
-	return nod, nil
+	return nod, i, nil
 }
 
 var pathTerminator = []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|'}
@@ -235,14 +284,14 @@ func nodeType(path []byte, i int, nod *tNode) (bool, int, error) {
 	if ch == '.' {
 		i++
 		if i == l {
-			return true, i, errors.New("path: unexpected end of path")
+			return true, i, errPathUnexpectedEnd
 		}
 		if path[i] == '.' {
 			nod.Type |= cDeep
 			i++
 		}
 	} else if ch != '[' { // nested array
-		return true, i, errors.New("path: invalid element reference")
+		return true, i, errPathInvalidReference
 	}
 	return false, i, nil
 }
@@ -251,7 +300,7 @@ func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
 	if !(bytes.EqualFold(nod.Key, []byte("length")) ||
 		bytes.EqualFold(nod.Key, []byte("count")) ||
 		bytes.EqualFold(nod.Key, []byte("size"))) {
-		return true, i, errors.New("path: unknown function")
+		return true, i, errPathUnknownFunction
 	}
 	nod.Type |= cFunction
 	i += 2
@@ -285,7 +334,7 @@ func parseArrayIndex(path []byte, i int, nod *tNode) (int, error) {
 		}
 	}
 	if i >= l || path[i] != ']' {
-		return i, errors.New("path: index bound missing")
+		return i, errPathIndexBoundMissing
 	}
 	i++ // ]
 	if i == l {
@@ -303,7 +352,7 @@ func parseKeyList(path []byte, i int, nod *tNode) (int, error) {
 		for ; e < l && path[e] != '\''; e++ {
 		}
 		if e == l {
-			return i, errors.New("path: key list terminated unexpectedly")
+			return i, errPathKeyListTerminated
 		}
 		nod.Keys = append(nod.Keys, path[i:e])
 		i = e + 1 // skip '
@@ -311,7 +360,7 @@ func parseKeyList(path []byte, i int, nod *tNode) (int, error) {
 		} // sek to next ' or ]
 	}
 	if i == l {
-		return i, errors.New("path: key list terminated unexpectedly")
+		return i, errPathKeyListTerminated
 	}
 	i++ // ]
 	if i == l {
@@ -325,7 +374,7 @@ func readArrayIndex(path []byte, i int, nod *tNode) (int, error) {
 	num := 0
 	num, i = readInt(path, i)
 	if i == l || !bytein(path[i], []byte{':', ',', ']'}) {
-		return i, errors.New("path: index bound missing")
+		return i, errPathIndexBoundMissing
 	}
 	nod.Left = num
 
@@ -343,7 +392,7 @@ func readArrayIndex(path []byte, i int, nod *tNode) (int, error) {
 		i++
 		num, ii := readInt(path, i)
 		if ii-i > 0 && num == 0 {
-			return i, errors.New("path: 0 as a second bound does not make sense")
+			return i, errPathIndexNonsense
 		}
 		i = ii
 		nod.Right = num
@@ -356,14 +405,11 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 	i, _ := skipSpaces(input, 0)
 
 	input = input[i:]
-	if len(input) == 0 {
-		return nil, errors.New("unexpected end of input")
-	}
-	if !bytein(input[0], []byte{'{', '['}) {
-		return nil, errors.New("object or array expected")
+	if err = looksLikeJSON(input); err != nil {
+		return nil, err
 	}
 	// wildcard
-	if nod.Key != nil && len(nod.Key) == 1 && nod.Key[0] == '*' {
+	if len(nod.Key) == 1 && nod.Key[0] == '*' {
 		return wildScan(input, nod)
 	}
 	if len(nod.Keys) > 0 || (len(nod.Key) > 0 && nod.Key[0] != '$' && nod.Key[0] != '@') {
@@ -559,7 +605,7 @@ func getKeyValue(input []byte, nod *tNode) ([]byte, error) {
 		}
 		return append(ret, ']'), nil
 	}
-	return nil, errors.New(`field not found`)
+	return nil, errArrayElementNotFound
 }
 
 func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte) (bool, int, error) {
@@ -598,7 +644,7 @@ type tElem struct {
 // sliceArray select node(s) by bound(s)
 func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 	if input[0] != '[' {
-		return nil, errors.New("array expected")
+		return nil, errArrayExpected
 	}
 	i := 1 // skip '['
 
@@ -632,7 +678,7 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 	if nod.Type&cArrayRanged == 0 {
 		a := nod.Left + len(elems) // nod.Left is negative, so correct it to a real element index
 		if a < 0 {
-			return nil, errors.New("specified element not found")
+			return nil, errArrayElementNotFound
 		}
 		return input[elems[a].start:elems[a].end], nil
 	}
@@ -696,7 +742,7 @@ func getArrayElement(input []byte, i int, nod *tNode) ([]byte, error) {
 		}
 		ielem++
 	}
-	return nil, errors.New("specified element not found")
+	return nil, errArrayElementNotFound
 }
 
 func getFilteredElements(input []byte, i int, nod *tNode) ([]byte, error) {
@@ -741,7 +787,7 @@ func adjustBounds(left int, right int, n int) (int, int, error) {
 	}
 	b-- // right bound excluded
 	if n > 0 && (a < 0 || a >= n || b < 0 || b >= n) {
-		return 0, 0, errors.New("specified element not found")
+		return 0, 0, errArrayElementNotFound
 	}
 	return a, b, nil
 }
@@ -754,7 +800,7 @@ func seekToValue(input []byte, i int) (int, error) {
 		return 0, err
 	}
 	if input[i] != ':' {
-		return 0, errors.New("':' expected")
+		return 0, errColonExpected
 	}
 	i++ // colon
 	return skipSpaces(input, i)
@@ -811,7 +857,7 @@ func skipBoolNull(input []byte, i int) (int, error) {
 			return i + len(needles[n]), nil
 		}
 	}
-	return i, errors.New("unrecognized value")
+	return i, errUnrecognizedValue
 }
 
 func matchSubslice(str, needle []byte) bool {
@@ -829,7 +875,7 @@ func matchSubslice(str, needle []byte) bool {
 
 func checkValueType(input []byte, nod *tNode) error {
 	if len(input) < 2 {
-		return errors.New("unexpected end of input")
+		return errUnexpectedEnd
 	}
 	if nod.Type&cSubject > 0 {
 		return nil
@@ -839,9 +885,9 @@ func checkValueType(input []byte, nod *tNode) error {
 	}
 	ch := input[0]
 	if nod.Type&cArrayType == 0 && ch != '{' {
-		return errors.New("object expected")
+		return errObjectExpected
 	} else if nod.Type&cArrayType > 0 && ch != '[' {
-		return errors.New("array expected")
+		return errArrayExpected
 	}
 	return nil
 }
@@ -871,7 +917,7 @@ func doFunc(input []byte, nod *tNode) ([]byte, error) {
 				}
 			}
 		} else {
-			return nil, errors.New("length() is only applicable to array or string")
+			return nil, errInvalidLengthUsage
 		}
 	}
 	if err != nil {
@@ -907,7 +953,7 @@ func skipSpaces(input []byte, i int) (int, error) {
 		}
 	}
 	if i == l {
-		return i, errors.New("unexpected end of input")
+		return i, errUnexpectedEnd
 	}
 	return i, nil
 }
@@ -927,7 +973,7 @@ func skipString(input []byte, i int) (int, error) {
 		i++
 	}
 	if i == l && !done {
-		return 0, errors.New("unexpected end of input")
+		return 0, errUnexpectedEnd
 	}
 	return i, nil
 }
@@ -957,8 +1003,30 @@ func skipObject(input []byte, i int) (int, error) {
 		i++
 	}
 	if i == l {
-		return 0, errors.New("unexpected end of input")
+		return 0, errUnexpectedEnd
 	}
 	i++ // closing mark
 	return i, nil
+}
+
+func repool(node *tNode) {
+	// return nodes back to pool
+	for {
+		if node == nil {
+			break
+		}
+		p := node.Next
+		nodePool.Put(node)
+		node = p
+	}
+}
+
+func looksLikeJSON(input []byte) error {
+	if len(input) == 0 {
+		return errUnexpectedEnd
+	}
+	if input[0] != '{' && input[0] != '[' {
+		return errObjectOrArrayExpected
+	}
+	return nil
 }

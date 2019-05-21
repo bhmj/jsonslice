@@ -23,23 +23,30 @@ $ go get github.com/bhmj/jsonslice
 
 #### 2. use it
 
-```
+```golang
 import "github.com/bhmj/jsonslice"
 import "fmt"
 
 func main() {
-  var data = []byte(`
-    { "arr": [ 
-        { "elem": {"text": "hi!"} } 
-      ]
-    }
-  `)
+	var data = []byte(`
+	{ "sku": [ 
+			{ "id": 1, "name": "Bicycle", "price": 160, "extras": [ "flashlight", "pump" ] },
+			{ "id": 2, "name": "Scooter", "price": 280, "extras": [ "helmet", "gloves", "spare wheel" ] }
+		]
+	} `)
 
-  v, err := jsonslice.Get(data, "$.arr[0].elem")
+	a, _ := jsonslice.Get(data, "$.sku[0].price")
+	b, _ := jsonslice.Get(data, "$.sku[1].extras.count()")
+	c, _ := jsonslice.Get(data, "$.sku[?(@.price > 200)].name")
+	d, _ := jsonslice.Get(data, "$.sku[?(@.extras.count() < 3)].name")
 
-  fmt.Println(string(v)) // {"text": "hi!"}
+	fmt.Println(string(a)) // 160
+	fmt.Println(string(b)) // 3
+	fmt.Println(string(c)) // ["Scooter"]
+	fmt.Println(string(d)) // ["Bicycle"]
 }
 ```
+[Run in Go Playground](https://play.golang.org/p/a-V2DuPZL3F)
 
 ## Package functions
   
@@ -215,6 +222,9 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   More examples can be found in `jsonslice_test.go`  
   
 ## Changelog
+
+**0.7.5** (2019-05-21) -- Functions `count()`, `size()`, `length()` work in filters.
+> `$.store.bicycle.equipment[?(@.count() = 2)]` -> `[["light saber", "apparel"]]`  
 
 **0.7.4** (2019-03-01) -- Mallocs reduced (see Benchmarks section).
 

@@ -1,7 +1,6 @@
 package jsonslice
 
 import (
-	"errors"
 	"regexp"
 	"strconv"
 )
@@ -182,13 +181,11 @@ func tokComplex(path []byte, i int) (int, *tToken, error) {
 	l := len(path)
 	// jsonpath node
 	if path[i] == '@' || path[i] == '$' {
-		nod, err := parsePath(path[i:])
+		nod, j, err := parsePath(path[i:])
 		if err != nil {
 			return 0, nil, err
 		}
-		for i < l && !bytein(path[i], []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|'}) {
-			i++
-		}
+		i += j
 		return i, &tToken{Operand: &tOperand{Type: cOpNone, Node: nod}}, nil
 	}
 	// operator
@@ -197,14 +194,14 @@ func tokComplex(path []byte, i int) (int, *tToken, error) {
 	}
 	// compare
 	if i >= l-1 {
-		return i, nil, errors.New("unexpected end of token")
+		return i, nil, errUnexpectedEOT
 	}
 	for ic, cmp := range operator {
 		if string(path[i:i+len(cmp)]) == cmp {
 			return i + len(cmp), &tToken{Operator: operatorCode[ic]}, nil
 		}
 	}
-	return 0, nil, errors.New("unknown token " + string(path[i]))
+	return i, nil, errUnknownToken
 }
 
 func readNumber(path []byte, i int) (int, *tToken, error) {
@@ -236,7 +233,7 @@ func readString(path []byte, i int) (int, *tToken, error) {
 		i++
 	}
 	if i == l {
-		return i, nil, errors.New("unexpected end of string")
+		return i, nil, errUnexpectedStringEnd
 	}
 	e := i
 	i++ // unquote
@@ -252,7 +249,7 @@ func readBool(path []byte, i int) (int, *tToken, error) {
 		i++
 	}
 	if i == l || t[i-s] > 0 && f[i-s] > 0 {
-		return i, nil, errors.New("invalid boolean value")
+		return i, nil, errInvalidBoolean
 	}
 
 	return i, &tToken{Operand: &tOperand{Type: cOpBool, Bool: path[s] == 't'}}, nil
@@ -294,7 +291,7 @@ func readRegexp(path []byte, i int) (int, *tToken, error) {
 // filterMatch
 func filterMatch(input []byte, toks []*tToken) (bool, error) {
 	if len(toks) == 0 {
-		return false, errors.New("empty filter")
+		return false, errEmptyFilter
 	}
 	op, _, err := evalToken(input, toks)
 	if err != nil {
@@ -316,7 +313,7 @@ func filterMatch(input []byte, toks []*tToken) (bool, error) {
 
 func evalToken(input []byte, toks []*tToken) (*tOperand, []*tToken, error) {
 	if len(toks) == 0 {
-		return nil, toks, errors.New("not enough arguments")
+		return nil, toks, errNotEnoughArguments
 	}
 	tok := toks[0]
 	if tok.Operand != nil {
@@ -404,14 +401,14 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 		// logic
 		return opLogic(op, left, right)
 	}
-	return &res, errors.New("unknown operator")
+	return &res, errUnknownOperator
 }
 
 func opArithmetic(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 	var res tOperand
 
 	if left.Type != cOpNumber || right.Type != cOpNumber {
-		return nil, errors.New("invalid operands for " + string(op))
+		return nil, errInvalidArithmetic
 	}
 	res.Type = left.Type
 	switch op {
@@ -437,10 +434,10 @@ func opComparison(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 	}
 	if op == 'R' {
 		if !(left.Type == cOpString && right.Type == cOpRegexp) {
-			return nil, errors.New("invalid operands for regexp match")
+			return nil, errInvalidRegexp
 		}
 	} else if left.Type != right.Type {
-		return nil, errors.New("operand types do not match")
+		return nil, errOperandTypes
 	}
 	switch left.Type {
 	case cOpBool:
@@ -504,7 +501,7 @@ func opComparisonString(op byte, left *tOperand, right *tOperand) (*tOperand, er
 	case 'R':
 		res.Bool = right.Regexp.MatchString(string(left.Str))
 	default:
-		return left, errors.New("operator is not applicable to strings")
+		return left, errInvalidOperatorStrings
 	}
 	return &res, nil
 }

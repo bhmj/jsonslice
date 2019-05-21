@@ -272,6 +272,9 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.book[:]['price','title']`, []byte(`[[8.95,"Sayings of the Century"],[12.99,"Sword of Honour"],[8.99,"Moby Dick"],[22.99,"The Lord of the Rings"]]`)},
 		// multiple keys combined with filter
 		{`$.store.book[?(@.price > $.expensive*1.1)]['price','title']`, []byte(`[[12.99,"Sword of Honour"],[22.99,"The Lord of the Rings"]]`)},
+
+		// functions in filter
+		{`$.store.bicycle.equipment[?(@.count() == 2)][1]`, []byte(`["apparel"]`)},
 	}
 
 	for _, tst := range tests {
@@ -313,7 +316,7 @@ func Test_Errors(t *testing.T) {
 		Expected string
 	}{
 		// normally only . and [ expected after the key
-		{data, `$.store(foo`, `path: invalid element reference`},
+		{data, `$.store(foo`, `path: invalid element reference at 7`},
 		// unexpected EOF before :
 		{[]byte(`{"foo"  `), `$.foo`, `unexpected end of input`},
 		// unexpected EOF after :
@@ -332,22 +335,22 @@ func Test_Errors(t *testing.T) {
 		// empty
 		{data, ``, `path: empty`},
 		// unexpected end
-		{data, `$.`, `path: unexpected end of path`},
+		{data, `$.`, `path: unexpected end of path at 2`},
 		// bad function
-		{data, `$.foo()`, `path: unknown function`},
+		{data, `$.foo()`, `path: unknown function at 5`},
 
 		// array: index bound missing
-		{data, `$.store.book[1`, `path: index bound missing`},
+		{data, `$.store.book[1`, `path: index bound missing at 14`},
 		// array: path: 0 as a second bound does not make sense
-		{data, `$.store.book[1:0`, `path: 0 as a second bound does not make sense`},
+		{data, `$.store.book[1:0`, `path: 0 as a second bound does not make sense at 15`},
 		// array: index bound missing (2nd)
-		{data, `$.store.book[1:3`, `path: index bound missing`},
+		{data, `$.store.book[1:3`, `path: index bound missing at 16`},
 		// array: node does not exist
-		{data, `$.store.book[99]`, `specified element not found`},
+		{data, `$.store.book[99]`, `specified array element not found`},
 		// array: node does not exist
-		{data, `$.store.book[-99]`, `specified element not found`},
+		{data, `$.store.book[-99]`, `specified array element not found`},
 		// array: node does not exist
-		{data, `$.store.book[-99:-15]`, `specified element not found`},
+		{data, `$.store.book[-99:-15]`, `specified array element not found`},
 
 		// filter expression: empty
 		{data, `$.store.book[?()]`, `empty filter`},
@@ -355,9 +358,9 @@ func Test_Errors(t *testing.T) {
 		{data, `$.store.book[?(1+)]`, `not enough arguments`},
 
 		// wrong bool value
-		{[]byte(`{"foo": Troo}`), `$.foo`, `unrecognized value`},
+		{[]byte(`{"foo": Troo}`), `$.foo`, `unrecognized value: true, false or null expected`},
 		// wrong value
-		{[]byte(`{"foo": moo}`), `$.foo`, `unrecognized value`},
+		{[]byte(`{"foo": moo}`), `$.foo`, `unrecognized value: true, false or null expected`},
 		// unexpected EOF
 		{[]byte(`{"foo": { "bar": "bazz"`), `$.bar`, `unexpected end of input`},
 		// unexpected EOF
@@ -371,7 +374,7 @@ func Test_Errors(t *testing.T) {
 		// invalid string operator
 		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar > "zzz")]`, `operator is not applicable to strings`},
 		// unknown token
-		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar == 2^3)]`, `unknown token ^`},
+		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar == 2^3)]`, `unknown token at 18`},
 	}
 
 	for _, tst := range tests {
@@ -459,11 +462,11 @@ func Test_ArraySlice_Errors(t *testing.T) {
 		{data, `$.store.book[:].foo[:]`, `sub-slicing is not supported in GetArrayElements`},
 
 		// array index bounds
-		{condensed, `$.store.bicycle.equipment[5]`, `specified element not found`},
+		{condensed, `$.store.bicycle.equipment[5]`, `specified array element not found`},
 		// array index bounds
-		{condensed, `$.store.bicycle.equipment[0:5]`, `specified element not found`},
+		{condensed, `$.store.bicycle.equipment[0:5]`, `specified array element not found`},
 		// array index bounds
-		{condensed, `$.store.bicycle.equipment[-8]`, `specified element not found`},
+		{condensed, `$.store.bicycle.equipment[-8]`, `specified array element not found`},
 	}
 
 	for _, tst := range tests {
@@ -510,7 +513,7 @@ func Benchmark_JsonSlice_ParsePath(b *testing.B) {
 	nodePool.Put(nodePool.Get())
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		node, _ := parsePath(path)
+		node, _, _ := parsePath(path)
 		// return nodes back to pool
 		for {
 			if node == nil {
