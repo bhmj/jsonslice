@@ -46,7 +46,7 @@ func main() {
 	fmt.Println(string(d)) // ["Bicycle"]
 }
 ```
-[Run in Go Playground](https://play.golang.org/p/a-V2DuPZL3F)
+[Run in Go Playground](https://play.golang.org/p/fYv-Y12akvs)
 
 ## Package functions
   
