@@ -28,22 +28,22 @@ import "github.com/bhmj/jsonslice"
 import "fmt"
 
 func main() {
-	var data = []byte(`
-	{ "sku": [ 
-	    { "id": 1, "name": "Bicycle", "price": 160, "extras": [ "flashlight", "pump" ] },
-	    { "id": 2, "name": "Scooter", "price": 280, "extras": [ "helmet", "gloves", "spare wheel" ] }
-	  ]
-	} `)
+    var data = []byte(`
+    { "sku": [ 
+        { "id": 1, "name": "Bicycle", "price": 160, "extras": [ "flashlight", "pump" ] },
+        { "id": 2, "name": "Scooter", "price": 280, "extras": [ "helmet", "gloves", "spare wheel" ] }
+      ]
+    } `)
 
-	a, _ := jsonslice.Get(data, "$.sku[0].price")
-	b, _ := jsonslice.Get(data, "$.sku[1].extras.count()")
-	c, _ := jsonslice.Get(data, "$.sku[?(@.price > 200)].name")
-	d, _ := jsonslice.Get(data, "$.sku[?(@.extras.count() < 3)].name")
+    a, _ := jsonslice.Get(data, "$.sku[0].price")
+    b, _ := jsonslice.Get(data, "$.sku[1].extras.count()")
+    c, _ := jsonslice.Get(data, "$.sku[?(@.price > 200)].name")
+    d, _ := jsonslice.Get(data, "$.sku[?(@.extras.count() < 3)].name")
 
-	fmt.Println(string(a)) // 160
-	fmt.Println(string(b)) // 3
-	fmt.Println(string(c)) // ["Scooter"]
-	fmt.Println(string(d)) // ["Bicycle"]
+    fmt.Println(string(a)) // 160
+    fmt.Println(string(b)) // 3
+    fmt.Println(string(c)) // ["Scooter"]
+    fmt.Println(string(d)) // ["Bicycle"]
 }
 ```
 [Run in Go Playground](https://play.golang.org/p/fYv-Y12akvs)
