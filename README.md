@@ -223,6 +223,8 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   
 ## Changelog
 
+**0.7.6** (2019-09-11) -- bugfix: escaped backslash at the end of a string value.
+
 **0.7.5** (2019-05-21) -- Functions `count()`, `size()`, `length()` work in filters.
 > `$.store.bicycle.equipment[?(@.count() = 2)]` -> `[["light saber", "apparel"]]`  
 
@@ -252,13 +254,13 @@ Also, indexing on root node is supported (assuming json is an array and not an o
 **0.5.1** (2018-06-15) -- Logical expressions added.
 > `$.store.book[?(@.price > $.expensive && @.isbn)].title` -> `["The Lord of the Rings"]`
 
-**0.5.0** (2018-06-14) -- Expressions added.
+**0.5.0** (2018-06-14) -- Expressions (aka filters) added.
 > `$.store.book[?(@.price > $.expensive)].title` -> `["Sword of Honour","The Lord of the Rings"]`
 
 **0.4.0** (2018-05-16) -- Aggregating sub-queries added.
 > `$.store.book[1:3].author` -> `["John","William"]`
 
-**0.3.0** (2018-05-05) -- Beta  
+**0.3.0** (2018-05-05) -- MVP.
 
 ## Roadmap
 

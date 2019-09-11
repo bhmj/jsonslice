@@ -960,16 +960,16 @@ func skipSpaces(input []byte, i int) (int, error) {
 
 func skipString(input []byte, i int) (int, error) {
 	bound := input[i]
-	prev := bound
 	done := false
+	escaped := false
 	i++
 	l := len(input)
 	for i < l && !done {
 		ch := input[i]
-		if ch == bound && prev != '\\' {
+		if ch == bound && !escaped {
 			done = true
 		}
-		prev = ch
+		escaped = ch == '\\' && !escaped
 		i++
 	}
 	if i == l && !done {
