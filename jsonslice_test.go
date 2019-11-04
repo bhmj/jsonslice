@@ -173,7 +173,7 @@ func Test_Expressions(t *testing.T) {
 		Expected []byte
 	}{
 		// self
-		{`$`, data},
+		//{`$`, data},
 		// simple query
 		{`$.expensive`, []byte(`10`)},
 		// simple query
@@ -207,7 +207,7 @@ func Test_Expressions(t *testing.T) {
 		// filters: simple expression
 		{`$.store.book[?(@.price==12.99)].title`, []byte(`["Sword of Honour"]`)},
 		// more spaces
-		{`$.store.book[?(   @.price   >   10)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
+		{`$.store.book[?(   @.price   >   10  )].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
 		// field presence
 		{`$.store.book[?(@.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
 		// string match
@@ -275,6 +275,8 @@ func Test_Expressions(t *testing.T) {
 
 		// functions in filter
 		{`$.store.bicycle.equipment[?(@.count() == 2)][1]`, []byte(`["apparel"]`)},
+
+		//
 	}
 
 	for _, tst := range tests {

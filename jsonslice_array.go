@@ -82,21 +82,22 @@ func getValueAE(input []byte, nod *tNode, alloc int) (result [][]byte, err error
 	if nod.Type&cSubject > 0 {
 		return nil, errFunctionsNotSupported
 	}
-	if nod.Type&cIsTerminal > 0 {
-		if nod.Type&cArrayType == 0 {
-			return nil, errTerminalNodeArray
-		}
-		return sliceArrayElements(input, nod, alloc)
+	if nod.Type&cIsTerminal > 0 && input[i] != '[' {
+		return nil, errTerminalNodeArray
 	}
-	if nod.Type&cArrayType > 0 {
-		if nod.Type&cAgg > 0 {
-			return nil, errSubslicingNotSupported
+	return sliceArrayElements(input, nod, alloc)
+
+	/*
+		if nod.Type&cArrayType > 0 {
+			if nod.Type&cAgg > 0 {
+				return nil, errSubslicingNotSupported
+			}
+			if input, err = sliceArray(input, nod); err != nil {
+				return nil, err
+			}
 		}
-		if input, err = sliceArray(input, nod); err != nil {
-			return nil, err
-		}
-	}
-	return getValueAE(input, nod.Next, alloc)
+	*/
+	//return getValueAE(input, nod.Next, alloc)
 }
 
 // sliceArrayElements returns a slice of array elements
@@ -108,7 +109,7 @@ func sliceArrayElements(input []byte, nod *tNode, alloc int) ([][]byte, error) {
 
 	res := make([][]byte, 0, alloc)
 
-	if nod.Type&cArrayRanged == 0 && nod.Left >= 0 && len(nod.Elems) == 0 {
+	if /*nod.Type&cArrayRanged == 0 &&*/ nod.Left >= 0 && len(nod.Elems) == 0 {
 		// single positive index -- easiest case
 		elem, err := getArrayElement(input, i, nod)
 		if err != nil {
@@ -135,7 +136,7 @@ func sliceArrayElements(input []byte, nod *tNode, alloc int) ([][]byte, error) {
 		return res, nil
 	}
 	//   select by index(es)
-	if nod.Type&cArrayRanged == 0 {
+	if nod.Type&cSlice == 0 {
 		a := nod.Left + len(elems) // nod.Left is negative, so correct it to a real element index
 		if a < 0 {
 			return nil, errArrayElementNotFound

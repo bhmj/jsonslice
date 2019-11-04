@@ -140,7 +140,7 @@ Also, indexing on root node is supported (assuming json is an array and not an o
 ```
   $.obj.length()      -- number of elements in an array or string length, depending on the obj type
   $.obj.count()       -- same as above
-  $.obj.size()        -- object size in bytes (as is)
+  $.val.size()        -- value size in bytes (as is)
 ```
 #### Objects
 ```
