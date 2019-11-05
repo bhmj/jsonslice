@@ -172,10 +172,10 @@ func Test_Expressions(t *testing.T) {
 		Query    string
 		Expected []byte
 	}{
-		// self
-		//{`$`, data},
+		/* self
+		{`$`, data},
 		// simple query
-		//{`$.expensive`, []byte(`10`)},
+		{`$.expensive`, []byte(`10`)},
 		// simple query
 		{`$.store.book[3].author`, []byte(`"J. R. R. Tolkien"`)},
 
@@ -185,7 +185,7 @@ func Test_Expressions(t *testing.T) {
 
 		// negative index
 		{`$.store.book[-1].author`, []byte(`"J. R. R. Tolkien"`)},
-		// negative indexes
+		// negative indexes*/
 		{`$.store.book[-3:-2].author`, []byte(`["Evelyn Waugh"]`)},
 
 		// functions

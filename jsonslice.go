@@ -282,6 +282,7 @@ func parsePath(path []byte) (*tNode, int, error) {
 func readRef(path []byte, i int) (*tNode, int, error) {
 	var err error
 	var next *tNode
+	var sep byte
 	//var sep byte
 	nod := getEmptyNode()
 
@@ -314,10 +315,14 @@ func readRef(path []byte, i int) (*tNode, int, error) {
 		return nil, i, errPathInvalidChar
 	}
 	// single key
-	nod.Key, nod.Left, _, i, err = readKey(path, i)
-
+	nod.Key, nod.Left, sep, i, err = readKey(path, i)
 	if i == l {
 		return nod, i, nil
+	}
+	// function
+	if sep == '(' && i+1 < l && path[i+1] == ')' {
+		_, i, err = detectFn(path, i, nod)
+		return nod, i, err
 	}
 
 	// recursive
@@ -354,25 +359,25 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 				return i, errPathInvalidChar
 			}
 			mode |= cKeyAgg
+			i++
 		case ':':
 			if mode&cKeyAgg > 0 {
 				return i, errPathInvalidChar
 			}
 			mode |= cKeySlice
+			i++
 		case 0:
 			return i, errPathUnexpectedEnd
 		default:
 			return i, errPathInvalidChar
 		}
 		nod.Key = key
-		nod.Left = ikey
 		if mode&cKeyAgg > 0 {
 			nod.Keys = append(nod.Keys, key)
 			if ikey != cNAN {
 				nod.Elems = append(nod.Elems, ikey)
 			}
-		}
-		if mode&cKeySlice > 0 {
+		} else if mode&cKeySlice > 0 {
 			if ikey == cNAN {
 				return i, errPathInvalidChar
 			}
@@ -387,6 +392,8 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 				return i, errPathInvalidChar
 			}
 			pos++
+		} else {
+			nod.Left = ikey
 		}
 	}
 	if i == l {
@@ -425,6 +432,9 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, error) {
 			i++
 		}
 	} else {
+		if path[i] == '-' {
+			i++
+		}
 		for i < l {
 			if bytein(path[i], keyTerminator) {
 				ii, sep := skipSp(path, i)
