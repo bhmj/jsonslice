@@ -20,6 +20,7 @@ var (
 	nodePool sync.Pool
 
 	errPathEmpty,
+	errPathInvalidChar,
 	errPathRootExpected,
 	errPathUnexpectedEnd,
 	errPathInvalidReference,
@@ -59,11 +60,15 @@ func init() {
 			return &tNode{
 				Keys:  make([]word, 0),
 				Elems: make([]int, 0),
+				Left:  cNAN,
+				Right: cNAN,
+				Step:  1,
 			}
 		},
 	}
 
 	errPathEmpty = errors.New("path: empty")
+	errPathInvalidChar = errors.New("path: invalid character")
 	errPathRootExpected = errors.New("path: $ expected")
 	errPathUnexpectedEnd = errors.New("path: unexpected end of path")
 	errPathInvalidReference = errors.New("path: invalid element reference")
@@ -129,7 +134,7 @@ func Get(input []byte, path string) ([]byte, error) {
 		return nil, errPathRootExpected
 	}
 
-	node, i, err := parsePath([]byte(path))
+	node, i, err := readRef([]byte(path), 1)
 	if err != nil {
 		repool(node)
 		return nil, errors.New(err.Error() + " at " + strconv.Itoa(i))
@@ -163,16 +168,24 @@ func Get(input []byte, path string) ([]byte, error) {
 }
 
 const (
+	cDot        = 1 << iota // common [dot-]node
 	cIsTerminal = 1 << iota // terminal node
-	cSlice      = 1 << iota // slice array [x:y:s]
-	cFunction   = 1 << iota // function
-	cSubject    = 1 << iota // function subject
-	cIndex      = 1 << iota // single index
-	cFilter     = 1 << iota // filter
 	cAgg        = 1 << iota // aggregating
+	cFunction   = 1 << iota // function
+	cSlice      = 1 << iota // slice array [x:y:s]
+	cFilter     = 1 << iota // filter
 	cWild       = 1 << iota // wildcard (*)
 	cDeep       = 1 << iota // deepscan
-	cNAN        = 1 << 20   // not-a-number
+
+	cSubject = 1 << iota // function subject
+	cIndex   = 1 << iota // single index
+
+	cKeySingle = 1 << iota //
+	cKeyAgg    = 1 << iota //
+	cKeySlice  = 1 << iota //
+
+	cEmpty = 1 << 29 // empty number
+	cNAN   = 1 << 30 // not-a-number
 )
 
 type word []byte
@@ -200,7 +213,7 @@ func bytein(b byte, seq []byte) bool {
 	return false
 }
 
-var keyTerminator = []byte{' ', '\t', '.', '[', '(', ')', ']', '<', '=', '>', '+', '-', '*', '/', '&', '|'}
+var keyTerminator = []byte{' ', '\t', ':', '.', '[', '(', ')', ']', '<', '=', '>', '+', '-', '*', '/', '&', '|'}
 
 // parse jsonpath and return a root of a linked list of nodes
 func parsePath(path []byte) (*tNode, int, error) {
@@ -215,16 +228,20 @@ func parsePath(path []byte) (*tNode, int, error) {
 		return nil, i, errPathUnexpectedEnd
 	}
 
+	nod, i, err = readRef(path, i)
+	if err != nil {
+		return nil, i, err
+	}
+
 	// get key
 	if path[i] == '*' {
 		i++
+		nod.Type &= cWild
 	} else {
 		for ; i < l && !bytein(path[i], keyTerminator); i++ {
 		}
+		nod.Key = path[:i]
 	}
-
-	nod = getEmptyNode()
-	nod.Key = path[:i]
 
 	if i == l {
 		// finished parsing
@@ -260,6 +277,179 @@ func parsePath(path []byte) (*tNode, int, error) {
 		nod.Type |= cSubject
 	}
 	return nod, i, nil
+}
+
+func readRef(path []byte, i int) (*tNode, int, error) {
+	var err error
+	var next *tNode
+	//var sep byte
+	nod := getEmptyNode()
+
+	l := len(path)
+	// [optional] dots
+	if path[i] == '.' {
+		if i+1 < l && path[i+1] == '.' {
+			nod.Type |= cDeep
+			i++
+		} else {
+			nod.Type |= cDot
+		}
+		i++
+	}
+	if i == l {
+		return nil, i, errUnexpectedEnd
+	}
+	// bracket notated
+	if path[i] == '[' {
+		i++
+		i, err = readBrackets(nod, path, i)
+		if err != nil {
+			return nil, i, err
+		}
+		next, i, err = readRef(path, i)
+		nod.Next = next
+		return nod, i, err
+	}
+	if nod.Type&(cDot|cDeep) == 0 {
+		return nil, i, errPathInvalidChar
+	}
+	// single key
+	nod.Key, nod.Left, _, i, err = readKey(path, i)
+
+	if i == l {
+		return nod, i, nil
+	}
+
+	// recursive
+	next, i, err = readRef(path, i)
+	nod.Next = next
+	return nod, i, err
+}
+
+// read bracket-notated keys
+// consumes final ']'
+func readBrackets(nod *tNode, path []byte, i int) (int, error) {
+	var (
+		key  []byte
+		ikey int
+		sep  byte
+		err  error
+	)
+	l := len(path)
+	if i < l-1 && path[i] == '?' && path[i+1] == '(' {
+		return readFilter(path, i, nod)
+	}
+	mode := 0
+	pos := 0
+	for i < l && path[i] != ']' {
+		key, ikey, sep, i, err = readKey(path, i)
+		if err != nil {
+			return i, err
+		}
+		switch sep {
+		case ']':
+			// end of key list
+		case ',':
+			if mode&cKeySlice > 0 {
+				return i, errPathInvalidChar
+			}
+			mode |= cKeyAgg
+		case ':':
+			if mode&cKeyAgg > 0 {
+				return i, errPathInvalidChar
+			}
+			mode |= cKeySlice
+		case 0:
+			return i, errPathUnexpectedEnd
+		default:
+			return i, errPathInvalidChar
+		}
+		nod.Key = key
+		nod.Left = ikey
+		if mode&cKeyAgg > 0 {
+			nod.Keys = append(nod.Keys, key)
+			if ikey != cNAN {
+				nod.Elems = append(nod.Elems, ikey)
+			}
+		}
+		if mode&cKeySlice > 0 {
+			if ikey == cNAN {
+				return i, errPathInvalidChar
+			}
+			switch pos {
+			case 0:
+				nod.Left = ikey
+			case 1:
+				nod.Right = ikey
+			case 2:
+				nod.Step = ikey
+			default:
+				return i, errPathInvalidChar
+			}
+			pos++
+		}
+	}
+	if i == l {
+		return i, errPathUnexpectedEnd
+	}
+	i++ // ']'
+	return i, nil
+}
+
+// read next key
+// returns:
+//   key  = the key
+//   ikey = integer converted key
+//   sep  = key list separator (expected , : [ ] . 0)
+//   i    = current i (after the sep)
+//   err  = error
+func readKey(path []byte, i int) ([]byte, int, byte, int, error) {
+	l := len(path)
+	s := i
+	if i == l {
+		return nil, 0, 0, i, errPathUnexpectedEnd
+	}
+	bound := byte(0)
+	if bytein(path[i], []byte{'\'', '"'}) {
+		bound = path[i]
+		i++
+	}
+	prev := byte(0)
+	if bound > 0 {
+		for i < l {
+			if prev != '\\' && path[i] == bound {
+				ii, sep := skipSp(path, i+1)
+				return path[s:i], toInt(path[s:i]), sep, ii, nil
+			}
+			prev = path[i]
+			i++
+		}
+	} else {
+		for i < l {
+			if bytein(path[i], keyTerminator) {
+				ii, sep := skipSp(path, i)
+				return path[s:i], toInt(path[s:i]), sep, ii, nil
+			}
+			prev = path[i]
+			i++
+		}
+	}
+	if i == l && bound == 0 {
+		// terminal key
+		return path[s:i], toInt(path[s:i]), 0, i, nil
+	}
+	return nil, cNAN, 0, i, errPathUnexpectedEnd
+}
+
+func toInt(buf []byte) int {
+	if len(buf) == 0 {
+		return cEmpty
+	}
+	n, err := strconv.Atoi(string(buf))
+	if err != nil {
+		return cNAN
+	}
+	return n
 }
 
 var pathTerminator = []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|'}
@@ -1144,6 +1334,16 @@ func skipSpaces(input []byte, i int) (int, error) {
 		return i, errUnexpectedEnd
 	}
 	return i, nil
+}
+
+func skipSp(input []byte, i int) (int, byte) {
+	l := len(input)
+	for ; i < l && (input[i] == ' ' || input[i] == '\t'); i++ {
+	}
+	if i == l {
+		return i, 0
+	}
+	return i, input[i]
 }
 
 func skipString(input []byte, i int) (int, error) {

@@ -1,0 +1,89 @@
+{
+	"key": { "aaa": 123 },
+	"more": "foo",
+	"bar": { "xxx": null, "aaa": 456 }
+}
+
+$['key','bar'].aaa
+[ {"aaa":123}, { "xxx": null, "aaa": 456 } ]
+
+$['key','bar'].aaa
+[ 123, 456 ]
+
+$[*].foo
+[ {"foo":1} ] => [ 1 ]
+{ "m": {"foo":1} } => [ 1 ]
+
+$[*].foo[*]
+[ {"foo":[{"a":2}]} ] => [ 1 ]
+{ "m": {"foo":1} } => [ 1 ]
+
+$[*]			=> [ [{"baz":"hello"}], {"foo":[{"xxx":1}, {"yyy":2}]} ]
+$[*].foo		=> [ [{"xxx":1}, {"yyy":2}] ]
+$[*].foo[*]		=> [ {"xxx":1}, {"yyy":2} ]
+$.*.foo[*]		=> [ {"xxx":1}, {"yyy":2} ]
+{
+	"bar": [
+		{"baz": "hello"}]
+	},
+	"kekeke": {
+		"foo":"xxx"
+	}
+}
+
+--- --- ---
+$[*].bar[*].baz
+[{"bar": [{"baz": "hello"}]},{"foo":"xxx"}]
+
+[	// $
+	{	// $[*]
+		"bar": [ // $[*].bar
+			{
+				"baz": "hello"
+			}
+		]
+	},
+	{
+		"foo": "xxx"
+	}
+]
+
+$[*] == $.*
+[ + {"bar": [{"baz": "hello"}]},{"foo":"xxx"} + ]
+
+$[*].bar == $.*.bar
+[ + [{"baz": "hello"}]]
+$[*].bar[*]
+[[{"baz": "hello"}]]
+
+--- --- ---
+$[*].bar[*].baz
+$.*.bar.*.hello
+
+{	// $
+	"obj": { // $.*
+		"bar": { // $.*.bar
+			"car": { // $.*.bar.*
+				"baz": "hello" // $.*.bar.*.baz
+			}
+		},
+		"foo":"xxx"
+	}
+}
+
+[
+	"obj": { // $.*
+		"bar": { // $.*.bar
+			"car": { // $.*.bar.*
+				"baz": "hello" // $.*.bar.*.baz
+			}
+		},
+		"foo":"xxx"
+	}
+}
+
+
+
+
+$[*] == $.*
+[ + [{"bar": "hello"}], "xxx" + ]

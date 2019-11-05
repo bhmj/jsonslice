@@ -36,10 +36,12 @@ path | input 1 | result 1<br>explanation | input 2 | result 2<br>explanation
 	${ref}{ref}...
 	@{ref}{ref}...
 ref:
-	.{key}
-	..{key}
+	.|..{keyref}
+	|.|..|{brackets}
+keyref:
+	key|brackets
+brackets:
 	[{someth}]
-	..[{someth}]
 key:
 	string
 	word
@@ -49,7 +51,7 @@ someth:
 	?({expr})
 	{key}
 	{key},{key}...
-	{index}
+	{index},{index}...
 	{start}:{end}
 	{start}:{end}:{step}
 index, start, end, step:
@@ -77,7 +79,7 @@ ref types:
 example | type | applied to | flags | notes (NF = not found)
 --- | --- | --- | --- | ---
 `$.key` or `$.'key'` | single word key | object | **common** | NF on arrays
-`$.3` or `$[3]` or `$['3']` | single numeric key == index | object, array | **common**
+`$.3` or `$[3]` or `$['3']` or `$.[3]` or `$.['3']` | single numeric key == index | object, array | **common**
 `$[1,2]` | union | object or array | **aggregating** | 
 `$[1,'a']` | union | object or array | **aggregating** | word keys NF on arrays
 `$[1,'a']` | union | object or array | **aggregating** | word keys NF on arrays
@@ -86,6 +88,8 @@ example | type | applied to | flags | notes (NF = not found)
 `$[xx:yy:zz]` | slice | array | **slice** | NF on objects
 `$[:]` | slice | array | **slice** | == `$.*` in comprehensive mode (?)
 `$..key` or `$..['key']` | sigle word key | array or object | **deepscan** | 
+`$..[0]` or `$..['0']` | sigle word key == index | array or object | **deepscan** | 
+`$..[0:2]` |  | array | **deepscan** | 
 `$.*` or `$[*]` | wildcard | array or object | **wildcard**
 `$..*` or `$..[*]` | deepscan wildcard | array or object | **deepscan** **wildcard**
 
@@ -112,11 +116,12 @@ example | type | applied to | flags | notes (NF = not found)
 	- array
 		- length or size
 	- string
-		- 
+		- string length
 - 
 
 ref flags:
 
+	- common		- common node
 	- terminal		- no more refs follow, return result
 	- union
 		- object: collect values of keys, return array

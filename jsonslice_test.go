@@ -175,7 +175,7 @@ func Test_Expressions(t *testing.T) {
 		// self
 		//{`$`, data},
 		// simple query
-		{`$.expensive`, []byte(`10`)},
+		//{`$.expensive`, []byte(`10`)},
 		// simple query
 		{`$.store.book[3].author`, []byte(`"J. R. R. Tolkien"`)},
 
