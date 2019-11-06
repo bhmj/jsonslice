@@ -109,9 +109,10 @@ func getEmptyNode() *tNode {
 	nod.Filter = nil
 	nod.Key = nod.Key[:0]
 	nod.Keys = nod.Keys[:0]
-	nod.Left = 0
+	nod.Left = cNAN
+	nod.Right = cNAN
+	nod.Step = 1
 	nod.Next = nil
-	nod.Right = 0
 	nod.Type = 0
 	return nod
 }
@@ -134,7 +135,7 @@ func Get(input []byte, path string) ([]byte, error) {
 		return nil, errPathRootExpected
 	}
 
-	node, i, err := readRef([]byte(path), 1)
+	node, i, err := readRef(unspace([]byte(path)), 1)
 	if err != nil {
 		repool(node)
 		return nil, errors.New(err.Error() + " at " + strconv.Itoa(i))
@@ -180,9 +181,10 @@ const (
 	cSubject = 1 << iota // function subject
 	cIndex   = 1 << iota // single index
 
-	cKeySingle = 1 << iota //
-	cKeyAgg    = 1 << iota //
-	cKeySlice  = 1 << iota //
+	cKeyAgg   = 1 << iota // key is aggregating
+	cKeySlice = 1 << iota // key is slice
+	cCurrent  = 1 << iota // key is referred to current node
+	cRoot     = 1 << iota // key is referred to root
 
 	cEmpty = 1 << 29 // empty number
 	cNAN   = 1 << 30 // not-a-number
@@ -304,8 +306,8 @@ func readRef(path []byte, i int) (*tNode, int, error) {
 	if path[i] == '[' {
 		i++
 		i, err = readBrackets(nod, path, i)
-		if err != nil {
-			return nil, i, err
+		if i == l || err != nil {
+			return nod, i, err
 		}
 		next, i, err = readRef(path, i)
 		nod.Next = next
@@ -323,6 +325,10 @@ func readRef(path []byte, i int) (*tNode, int, error) {
 	if sep == '(' && i+1 < l && path[i+1] == ')' {
 		_, i, err = detectFn(path, i, nod)
 		return nod, i, err
+	}
+	// path end?
+	if bytein(sep, pathTerminator) {
+		return nod, i, nil
 	}
 
 	// recursive
@@ -342,7 +348,7 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 	)
 	l := len(path)
 	if i < l-1 && path[i] == '?' && path[i+1] == '(' {
-		return readFilter(path, i, nod)
+		return readFilter(path, i+2, nod)
 	}
 	mode := 0
 	pos := 0
@@ -394,6 +400,7 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 			pos++
 		} else {
 			nod.Left = ikey
+			nod.Type |= cDot
 		}
 	}
 	if i == l {
@@ -425,8 +432,7 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, error) {
 	if bound > 0 {
 		for i < l {
 			if prev != '\\' && path[i] == bound {
-				ii, sep := skipSp(path, i+1)
-				return path[s:i], toInt(path[s:i]), sep, ii, nil
+				return path[s:i], toInt(path[s:i]), path[i], i + 1, nil
 			}
 			prev = path[i]
 			i++
@@ -437,8 +443,7 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, error) {
 		}
 		for i < l {
 			if bytein(path[i], keyTerminator) {
-				ii, sep := skipSp(path, i)
-				return path[s:i], toInt(path[s:i]), sep, ii, nil
+				return path[s:i], toInt(path[s:i]), path[i], i, nil
 			}
 			prev = path[i]
 			i++
@@ -1427,4 +1432,24 @@ func looksLikeJSON(input []byte) error {
 		return errObjectOrArrayExpected
 	}
 	return nil
+}
+
+func unspace(buf []byte) []byte {
+	r, w := 0, 0
+	bound := byte(0)
+	for r < len(buf) {
+		if (buf[r] == '\'' || buf[r] == '"') && bound == 0 {
+			bound = buf[r]
+		} else if buf[r] == bound {
+			bound = 0
+		}
+		if (buf[r] != ' ' && buf[r] != '\t') || bound > 0 {
+			if w != r {
+				buf[w] = buf[r]
+			}
+			w++
+		}
+		r++
+	}
+	return buf[:w]
 }

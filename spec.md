@@ -93,23 +93,25 @@ example | type | applied to | flags | notes (NF = not found)
 `$.*` or `$[*]` | wildcard | array or object | **wildcard**
 `$..*` or `$..[*]` | deepscan wildcard | array or object | **deepscan** **wildcard**
 
-- common
+- common ($.book or $[0]) -- cDot
 	- array
 		- word ref: NF
 		- index: by index
 	- object
 		- word ref: by name
 		- index: NF
-- aggregating []
+	- base type
+		- NF
+- aggregating ($[1,2] or $['a','b']) -- cAgg
 	- array
 		- word ref: NF
-		- index: by index
+		- index: AGG( by index )
 	- object
-		- word ref: by name
-		- index: by index
-- slice []
+		- word ref: AGG( by name )
+		- index: NF
+- slice ($[0:3]) -- cSlice
 	- array 
-		- slice
+		- AGG( slice elems )
 	- object
 		- NF
 - function
@@ -117,7 +119,23 @@ example | type | applied to | flags | notes (NF = not found)
 		- length or size
 	- string
 		- string length
-- 
+- wildcard (.* or [:] or [*])
+	- array
+		- AGG( all elements )
+	- object
+		- AGG( values of all keys )
+- deepscan ($..book or $..[0] or $..['foo','bar'])
+	- array
+		- word ref: AGG( recurse on every elem )
+		- index: AGG( get elem by index + recurse on every elem )
+	- object
+		- word ref: AGG( by name + recurse on every kvalue )
+		- index: AGG( recurse on every kvalue )
+- deepscan wildcard ($..* or $..[*] or $..[:])
+	- array
+		- AGG( all elems + recurse on every elem )
+	- object
+		- word ref: AGG( all kvalues + recurse on every kvalue )
 
 ref flags:
 

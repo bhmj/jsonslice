@@ -139,6 +139,12 @@ func readFilter(path []byte, i int, nod *tNode) (int, error) {
 
 	nod.Filter = &tFilter{toks: reverse(result.get())}
 
+	if i < l {
+		i++ // ')'
+		if i < l && path[i] == ']' {
+			i++
+		}
+	}
 	return i, nil
 }
 
@@ -181,9 +187,15 @@ func tokComplex(path []byte, i int) (int, *tToken, error) {
 	l := len(path)
 	// jsonpath node
 	if path[i] == '@' || path[i] == '$' {
-		nod, j, err := parsePath(path[i:])
+		nod, j, err := readRef(path[i:], 1)
 		if err != nil {
 			return 0, nil, err
+		}
+		switch path[i] {
+		case '@':
+			nod.Type |= cCurrent
+		case '$':
+			nod.Type |= cRoot
 		}
 		i += j
 		return i, &tToken{Operand: &tOperand{Type: cOpNone, Node: nod}}, nil

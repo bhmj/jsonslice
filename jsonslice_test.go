@@ -185,7 +185,7 @@ func Test_Expressions(t *testing.T) {
 
 		// negative index
 		{`$.store.book[-1].author`, []byte(`"J. R. R. Tolkien"`)},
-		// negative indexes*/
+		// negative indexes
 		{`$.store.book[-3:-2].author`, []byte(`["Evelyn Waugh"]`)},
 
 		// functions
@@ -203,7 +203,7 @@ func Test_Expressions(t *testing.T) {
 		// filters: simple expression
 		{`$.store.book[?(@.price>10)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
 		// filters: simple expression + spaces
-		{`$.store.book[?(@.price < 10)].title`, []byte(`["Sayings of the Century","Moby Dick"]`)},
+		{`$.store.book[?( @.price < 10 )].title`, []byte(`["Sayings of the Century","Moby Dick"]`)},
 		// filters: simple expression
 		{`$.store.book[?(@.price==12.99)].title`, []byte(`["Sword of Honour"]`)},
 		// more spaces
@@ -253,7 +253,7 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.book[?(@.title =~ /the/i)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
 		// regexp
 		{`$.store.book[?(@.title =~ /(Saying)|(Lord)/)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
-
+		*/
 		// array of arrays
 		{`$.store.bicycle.equipment[1][0]`, []byte(`"peg leg"`)},
 		// filter expression not found -- not an error
@@ -276,11 +276,42 @@ func Test_Expressions(t *testing.T) {
 		// functions in filter
 		{`$.store.bicycle.equipment[?(@.count() == 2)][1]`, []byte(`["apparel"]`)},
 
-		//
+		// gold standard
 	}
 
 	for _, tst := range tests {
 		res, err := Get(data, tst.Query)
+		if err != nil {
+			t.Errorf(tst.Query + " : " + err.Error())
+		} else if compareSlices(res, tst.Expected) != 0 {
+			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(res) + "`")
+		}
+	}
+}
+
+func Test_Extensions(t *testing.T) {
+
+	variant1 := []byte(`
+		{
+			"book": [
+				{"Author": "J.R.R.Tolkien", "Title": "Lord of the Rings"},
+				{"Author": "Z.Hopp", "Title": "Trollkrittet"}
+			]
+		}
+	`)
+
+	tests := []struct {
+		Query    string
+		Base     []byte
+		Expected []byte
+	}{
+		// custom extensions
+		{`$.'book'[1]`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
+		{`$.'book'.1`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
+	}
+
+	for _, tst := range tests {
+		res, err := Get(tst.Base, tst.Query)
 		if err != nil {
 			t.Errorf(tst.Query + " : " + err.Error())
 		} else if compareSlices(res, tst.Expected) != 0 {
