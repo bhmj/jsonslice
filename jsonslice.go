@@ -162,7 +162,7 @@ func Get(input []byte, path string) ([]byte, error) {
 		}
 	}
 
-	result, err := getValue2(input, node)
+	result, err := getValue2(input, 0, node)
 
 	repool(node)
 	return result, err
@@ -181,10 +181,8 @@ const (
 	cSubject = 1 << iota // function subject
 	cIndex   = 1 << iota // single index
 
-	cKeyAgg   = 1 << iota // key is aggregating
-	cKeySlice = 1 << iota // key is slice
-	cCurrent  = 1 << iota // key is referred to current node
-	cRoot     = 1 << iota // key is referred to root
+	cCurrent = 1 << iota // key is referred to current node
+	cRoot    = 1 << iota // key is referred to root
 
 	cEmpty = 1 << 29 // empty number
 	cNAN   = 1 << 30 // not-a-number
@@ -285,6 +283,7 @@ func readRef(path []byte, i int) (*tNode, int, error) {
 	var err error
 	var next *tNode
 	var sep byte
+	var wild int
 	//var sep byte
 	nod := getEmptyNode()
 
@@ -317,7 +316,8 @@ func readRef(path []byte, i int) (*tNode, int, error) {
 		return nil, i, errPathInvalidChar
 	}
 	// single key
-	nod.Key, nod.Left, sep, i, err = readKey(path, i)
+	nod.Key, nod.Left, sep, i, wild, err = readKey(path, i)
+	nod.Type |= wild
 	if i == l {
 		return nod, i, nil
 	}
@@ -345,6 +345,7 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 		ikey int
 		sep  byte
 		err  error
+		wild int
 	)
 	l := len(path)
 	if i < l-1 && path[i] == '?' && path[i+1] == '(' {
@@ -353,7 +354,7 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 	mode := 0
 	pos := 0
 	for i < l && path[i] != ']' {
-		key, ikey, sep, i, err = readKey(path, i)
+		key, ikey, sep, i, wild, err = readKey(path, i)
 		if err != nil {
 			return i, err
 		}
@@ -361,16 +362,16 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 		case ']':
 			// end of key list
 		case ',':
-			if mode&cKeySlice > 0 {
+			if mode&cSlice > 0 {
 				return i, errPathInvalidChar
 			}
-			mode |= cKeyAgg
+			mode |= cAgg
 			i++
 		case ':':
-			if mode&cKeyAgg > 0 {
+			if mode&cAgg > 0 {
 				return i, errPathInvalidChar
 			}
-			mode |= cKeySlice
+			mode |= cSlice
 			i++
 		case 0:
 			return i, errPathUnexpectedEnd
@@ -378,12 +379,12 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 			return i, errPathInvalidChar
 		}
 		nod.Key = key
-		if mode&cKeyAgg > 0 {
+		if mode&cAgg > 0 {
 			nod.Keys = append(nod.Keys, key)
 			if ikey != cNAN {
 				nod.Elems = append(nod.Elems, ikey)
 			}
-		} else if mode&cKeySlice > 0 {
+		} else if mode&cSlice > 0 {
 			if ikey == cNAN {
 				return i, errPathInvalidChar
 			}
@@ -400,7 +401,7 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 			pos++
 		} else {
 			nod.Left = ikey
-			nod.Type |= cDot
+			nod.Type |= cDot | wild
 		}
 	}
 	if i == l {
@@ -416,12 +417,13 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 //   ikey = integer converted key
 //   sep  = key list separator (expected , : [ ] . 0)
 //   i    = current i (after the sep)
+//   wild = cWild if wildcard
 //   err  = error
-func readKey(path []byte, i int) ([]byte, int, byte, int, error) {
+func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 	l := len(path)
 	s := i
 	if i == l {
-		return nil, 0, 0, i, errPathUnexpectedEnd
+		return nil, 0, 0, i, 0, errPathUnexpectedEnd
 	}
 	bound := byte(0)
 	if bytein(path[i], []byte{'\'', '"'}) {
@@ -432,7 +434,7 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, error) {
 	if bound > 0 {
 		for i < l {
 			if prev != '\\' && path[i] == bound {
-				return path[s:i], toInt(path[s:i]), path[i], i + 1, nil
+				return path[s:i], toInt(path[s:i]), path[i], i + 1, 0, nil
 			}
 			prev = path[i]
 			i++
@@ -443,7 +445,7 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, error) {
 		}
 		for i < l {
 			if bytein(path[i], keyTerminator) {
-				return path[s:i], toInt(path[s:i]), path[i], i, nil
+				return path[s:i], toInt(path[s:i]), path[i], i, ifWild(i-s, path[s]), nil
 			}
 			prev = path[i]
 			i++
@@ -451,9 +453,16 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, error) {
 	}
 	if i == l && bound == 0 {
 		// terminal key
-		return path[s:i], toInt(path[s:i]), 0, i, nil
+		return path[s:i], toInt(path[s:i]), 0, i, ifWild(i-s, path[s]), nil
 	}
-	return nil, cNAN, 0, i, errPathUnexpectedEnd
+	return nil, cNAN, 0, i, 0, errPathUnexpectedEnd
+}
+
+func ifWild(n int, ch byte) int {
+	if n == 1 && ch == '*' {
+		return cWild
+	}
+	return 0
 }
 
 func toInt(buf []byte) int {
@@ -742,8 +751,44 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 
 func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 
-	i, _ := skipSpaces(input, 0)
+	if nod == nil {
+		return input, nil
+	}
 
+	i, _ := skipSpaces(input, 0) // we're at the value
+	input = input[i:]
+
+	switch {
+	case nod.Type&cDot > 0:
+		return getValueDot(input, nod)
+	case nod.Type&cAgg > 0:
+	case nod.Type&cSlice > 0:
+	case nod.Type&cFunction > 0:
+	case nod.Type&cWild > 0:
+	case nod.Type&cDeep > 0:
+	}
+	return nil, errFieldNotFound
+}
+
+func getValueDot(input []byte, nod *tNode) (result []byte, err error) {
+	if len(input) == 0 {
+		return nil, nil
+	}
+	switch input[0] {
+	case '{':
+		result, err = objectValueByKey(input, nod.Key)
+	case '[':
+		result, err = arrayElemByIndex(input, nod.Left)
+	default:
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return getValue2(result, nod.Next)
+}
+
+/*
 	input = input[i:]
 	if err = looksLikeJSON(input); err != nil {
 		return nil, err
@@ -784,6 +829,7 @@ func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 
 	return getValue(input, nod.Next)
 }
+*/
 
 func wildScan(input []byte, nod *tNode) (result []byte, err error) {
 	result = []byte{}

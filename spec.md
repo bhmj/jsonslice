@@ -8,7 +8,7 @@ match the given jsonpath. Examples: strings that represent integers can be
 path | input 1 | result 1<br>explanation | input 2 | result 2<br>explanation
 --- | --- | --- | --- | ---
 `$[2]` or `$['2']` or `$.2` or `$.'2'`  | `["a","b","c"]` | `"c"`<br>array element by index |  `{ "1":"a", "2":"b" }` | `"b"`<br>object key by name
-`$[*]`<br>`$.*`  | `["a","b","c"]` | `["a","b","c"]`<br>all elements of an array |  `{ "1":"a", "2":"b" }` | `["a", "b"]`<br>values of all the keys
+`$.*`<br>`$[*]`<br>`$[:]`  | `["a","b","c"]` | `["a","b","c"]`<br>all elements of an array |  `{ "1":"a", "2":"b" }` | `["a", "b"]`<br>values of all the keys
 `$[*].bar`<br>`$.*.bar` | `[{"foo":1},{"bar":2}]` | `[2]`<br>find a key in every element |  `{"a":{"foo":1},"b":{"bar":2}}` | `[2]`<br>find a key in every value
 `$[1,2]`<br>`$['1','2']` | `["a","b","c"]` | `["b","c"]`<br>aggregate array elements by index |  `{"1":"a", "2":"b"}}` | `["a","b"]`<br>aggregate values of keys by name
 
@@ -76,10 +76,10 @@ string:
 ```
 
 ref types:
-example | type | applied to | flags | notes (NF = not found)
+example | type | applicable to | flags | notes (NF = not found)
 --- | --- | --- | --- | ---
 `$.key` or `$.'key'` | single word key | object | **common** | NF on arrays
-`$.3` or `$[3]` or `$['3']` or `$.[3]` or `$.['3']` | single numeric key == index | object, array | **common**
+`$.3` or `$[3]` or `$['3']` or `$.[3]` or `$.['3']` | single numeric key == index | object or array | **common**
 `$[1,2]` | union | object or array | **aggregating** | 
 `$[1,'a']` | union | object or array | **aggregating** | word keys NF on arrays
 `$[1,'a']` | union | object or array | **aggregating** | word keys NF on arrays
@@ -87,11 +87,11 @@ example | type | applied to | flags | notes (NF = not found)
 `$.key.size()` | function | object or array | **function** | 
 `$[xx:yy:zz]` | slice | array | **slice** | NF on objects
 `$[:]` | slice | array | **slice** | == `$.*` in comprehensive mode (?)
-`$..key` or `$..['key']` | sigle word key | array or object | **deepscan** | 
-`$..[0]` or `$..['0']` | sigle word key == index | array or object | **deepscan** | 
+`$..key` or `$..['key']` | sigle word key | object or array | **deepscan** | 
+`$..[0]` or `$..['0']` | sigle word key == index | object or array | **deepscan** | 
 `$..[0:2]` |  | array | **deepscan** | 
-`$.*` or `$[*]` | wildcard | array or object | **wildcard**
-`$..*` or `$..[*]` | deepscan wildcard | array or object | **deepscan** **wildcard**
+`$.*` or `$[*]` | wildcard | object or array | **wildcard**
+`$..*` or `$..[*]` | deepscan wildcard | object or array | **deepscan** **wildcard**
 
 - common ($.book or $[0]) -- cDot
 	- array
@@ -114,17 +114,17 @@ example | type | applied to | flags | notes (NF = not found)
 		- AGG( slice elems )
 	- object
 		- NF
-- function
+- function -- cFunction
 	- array
 		- length or size
 	- string
 		- string length
-- wildcard (.* or [:] or [*])
+- wildcard (.* or [:] or [*]) -- cWild
 	- array
 		- AGG( all elements )
 	- object
 		- AGG( values of all keys )
-- deepscan ($..book or $..[0] or $..['foo','bar'])
+- deepscan ($..book or $..[0] or $..['foo','bar']) -- cDeep
 	- array
 		- word ref: AGG( recurse on every elem )
 		- index: AGG( get elem by index + recurse on every elem )

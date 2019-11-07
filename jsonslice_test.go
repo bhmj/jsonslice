@@ -308,6 +308,8 @@ func Test_Extensions(t *testing.T) {
 		// custom extensions
 		{`$.'book'[1]`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
 		{`$.'book'.1`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
+		// wildcard ignored if not alone
+		{`$.book[1,*]`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
 	}
 
 	for _, tst := range tests {
