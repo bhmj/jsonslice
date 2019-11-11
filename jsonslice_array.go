@@ -145,7 +145,7 @@ func sliceArrayElements(input []byte, nod *tNode, alloc int) ([][]byte, error) {
 		return append(res, input[elems[a].start:elems[a].end]), nil
 	}
 	// two bounds
-	a, b, err := adjustBounds(nod.Left, nod.Right, len(elems))
+	a, b, _, err := adjustBounds(nod.Left, nod.Right, 1, len(elems))
 	if err != nil {
 		return nil, err
 	}

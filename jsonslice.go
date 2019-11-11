@@ -776,7 +776,7 @@ func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 	case nod.Type&cSlice > 0: // array slice
 		result, err = getValueSlice(input, nod) // recurse inside
 	case nod.Type&cFunction > 0: // func()
-		result, err = getValueFunc(input, nod) // no recurse
+		//result, err = getValueFunc(input, nod) // no recurse
 	case nod.Type&cWild > 0:
 	case nod.Type&cDeep > 0:
 	default:
@@ -788,39 +788,34 @@ func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 	return result, err
 }
 
-// *** :
+// *** : $.foo, $['foo','bar'], $[1], $[1,2]
 func getValueDot(input []byte, nod *tNode) (result []byte, err error) {
 	if len(input) == 0 {
-		return nil, nil
+		return
 	}
 	switch input[0] {
 	case '{':
-		result, err = objectValueByKey(input, nod) // 1+ (recurse inside)
+		return objectValueByKey(input, nod) // 1+ (recurse inside)
 	case '[':
-		result, err = arrayElemByIndex(input, nod) // 1+ (recurse inside)
+		return arrayElemByIndex(input, nod) // 1+ (recurse inside)
 	default:
-		return nil, nil
+		return nil, errObjectOrArrayExpected
 	}
-	return result, err
 }
 
-// *** :
+// *** : $[1:3], $[1:7:2]
 func getValueSlice(input []byte, nod *tNode) (result []byte, err error) {
-
-	// TODO: make slice fn!
-
 	if len(input) == 0 {
-		return nil, nil
+		return
 	}
 	switch input[0] {
 	case '{':
-		result, err = objectValueByKey(input, nod) // 1+ (recurse inside)
+		return
 	case '[':
-		result, err = arrayElemByIndex(input, nod) // 1+ (recurse inside)
+		return arraySlice(input, nod) // 1+ (recurse inside)
 	default:
-		return nil, nil
+		return nil, errObjectOrArrayExpected
 	}
-	return result, err
 }
 
 /*
@@ -1106,27 +1101,45 @@ func readObjectKey(input []byte, i int) ([]byte, int, error) {
 // recurse inside
 //
 func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
+	elems, elem, err := arrayIterateElems(input, nod)
+	if err != nil {
+		return nil, err
+	}
+	if elem != nil {
+		return getValue2(elem, nod.Next)
+	}
+	return collectRecurse(input, nod, elems)
+}
+
+func arraySlice(input []byte, nod *tNode) ([]byte, error) {
+	elems, _, err := arrayIterateElems(input, nod)
+	if err != nil {
+		return nil, err
+	}
+	return sliceRecurse(input, nod, elems)
+}
+
+func arrayIterateElems(input []byte, nod *tNode) (elems []tElem, elem []byte, err error) {
+	var i, s, e int
 	l := len(input)
-	var elems []tElem
-	var res []byte
 	if nod.Type&cFullScan > 0 {
 		elems = make([]tElem, 0, 32)
 	}
 	// skip spaces before value
-	i, err := skipSpaces(input, 1)
+	i, err = skipSpaces(input, 1) // skip '['
 	if err != nil {
-		return nil, err
+		return
 	}
 	for pos := 0; i < l && input[i] != ']'; {
-		s := i
-		e, err := skipValue(input, i)
+		s = i
+		e, err = skipValue(input, i)
 		if err != nil {
-			return nil, err
+			return
 		}
 		// skip spaces after value
 		i, err = skipSpaces(input, e)
 		if err != nil {
-			return nil, err
+			return
 		}
 		found := nod.Type&cFullScan > 0
 		for f := 0; !found && f < len(nod.Elems); f++ {
@@ -1135,13 +1148,22 @@ func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
 			}
 		}
 		if nod.Left == pos {
-			return getValue2(input[s:e], nod.Next)
+			elem = input[s:e]
+			return
 		}
 		if found {
 			elems = append(elems, tElem{s, e})
 		}
 	}
+	return
+}
+
+// ***
+func collectRecurse(input []byte, nod *tNode, elems []tElem) ([]byte, error) {
+	var res []byte
+	var err error
 	// collect & recurse
+	sep := []byte(nil)
 	for i := 0; i < len(nod.Elems); i++ {
 		e := nod.Elems[i]
 		if e < 0 {
@@ -1152,7 +1174,6 @@ func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			sep := []byte(nil)
 			if len(sub) > 0 {
 				res = append(append(res, sep...), sub...)
 				sep = []byte{','}
@@ -1163,43 +1184,27 @@ func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
 }
 
 // ***
-func arraySingleIndex(input []byte, nod *tNode) ([]byte, error) {
-	l := len(input)
-	for i, ielem := 0, 0; i < l && input[i] != ']'; ielem++ {
-		e, err := skipValue(input, i)
+func sliceRecurse(input []byte, nod *tNode, elems []tElem) ([]byte, error) {
+	var res []byte
+	var sub []byte
+	var err error
+	a, b, step, err := adjustBounds(nod.Left, nod.Right, nod.Step, len(elems))
+	if err != nil {
+		return nil, err
+	}
+	sep := []byte(nil)
+	// collect & recurse
+	for ; (a > b && step < 0) || (a < b && step > 0); a += step {
+		sub, err = getValue2(input[elems[a].start:elems[a].end], nod.Next)
 		if err != nil {
 			return nil, err
 		}
-		if ielem == nod.Left {
-			return getValue2(input[i:e], nod.Next)
-		}
-		// skip spaces after value
-		i, err = skipSpaces(input, e)
-		if err != nil {
-			return nil, err
+		if len(sub) > 0 {
+			res = append(append(res, sep...), sub...)
+			sep = []byte{','}
 		}
 	}
-	return nil, nil
-}
-
-// ***
-func arrayMultiIndex(input []byte, nod *tNode) ([]byte, error) {
-	l := len(input)
-	for i, ielem := 0, 0; i < l && input[i] != ']'; ielem++ {
-		e, err := skipValue(input, i)
-		if err != nil {
-			return nil, err
-		}
-		if ielem == nod.Left {
-			return getValue2(input[i:e], nod.Next)
-		}
-		// skip spaces after value
-		i, err = skipSpaces(input, e)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return nil, nil
+	return res, err
 }
 
 /*
@@ -1286,7 +1291,7 @@ func slice(input []byte, nod *tNode) ([]byte, error) {
 		return input[elems[a].start:elems[a].end], nil
 	}
 	// two bounds
-	a, b, err := adjustBounds(nod.Left, nod.Right, len(elems))
+	a, b, _, err := adjustBounds(nod.Left, nod.Right, 1, len(elems))
 	if err != nil {
 		return nil, err
 	}
@@ -1337,7 +1342,7 @@ func sliceArray(input []byte, nod *tNode) ([]byte, error) {
 		return input[elems[a].start:elems[a].end], nil
 	}
 	// two bounds
-	a, b, err := adjustBounds(nod.Left, nod.Right, len(elems))
+	a, b, _, err := adjustBounds(nod.Left, nod.Right, 1, len(elems))
 	if err != nil {
 		return nil, err
 	}
@@ -1431,23 +1436,72 @@ func getFilteredElements(input []byte, nod *tNode) ([]byte, error) {
 	return append(result, ']'), nil
 }
 
-func adjustBounds(left int, right int, n int) (int, int, error) {
-	a := left
-	b := right
-	if b == 0 {
-		b = n
+func adjustBounds(start int, stop int, step int, n int) (int, int, int, error) {
+	if step == 0 || step == cEmpty {
+		step = 1
 	}
-	if a < 0 {
-		a += n
+	if step > 0 {
+		start, stop = stepPositive(start, stop, n)
+	} else {
+		start, stop = stepNegative(start, stop, n)
 	}
-	if b < 0 {
-		b += n
+	return start, stop, step, nil
+}
+
+func stepPositive(start, stop, n int) (int, int) {
+	if start == cEmpty {
+		start = 0
 	}
-	b-- // right bound excluded
-	if n > 0 && (a < 0 || a >= n || b < 0 || b >= n) {
-		return 0, 0, errArrayElementNotFound
+	if stop == cEmpty {
+		stop = n
 	}
-	return a, b, nil
+	if start < 0 {
+		start += n
+	}
+	if start < 0 {
+		start = 0
+	}
+	if stop < 0 {
+		stop += n
+	}
+	if stop < 0 {
+		stop = -1
+	}
+	if start >= n {
+		start = n - 1
+	}
+	if stop >= n {
+		stop = n
+	}
+	return start, stop
+}
+
+func stepNegative(start, stop, n int) (int, int) {
+	if start == cEmpty {
+		start = n - 1
+	}
+	if stop != cEmpty && stop < 0 {
+		stop += n
+	}
+	if stop != cEmpty && stop < 0 {
+		stop = -1
+	}
+	if stop == cEmpty {
+		stop = -1
+	}
+	if start < 0 {
+		start += n
+	}
+	if start < 0 {
+		start = 0
+	}
+	if start >= n {
+		start = n - 1
+	}
+	if stop >= n {
+		stop = n
+	}
+	return start, stop
 }
 
 func seekToValue(input []byte, i int) (int, error) {
