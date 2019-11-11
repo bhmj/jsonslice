@@ -65,7 +65,7 @@ func Test_sliceRecurse(t *testing.T) {
 		nod      *tNode
 		expected string
 	}{
-		// [:]
+		// [:] == [::]
 		{&tNode{Left: cEmpty, Right: cEmpty, Step: cEmpty}, `"a","b","c","d","e"`},
 		// [2:]
 		{&tNode{Left: 2, Right: cEmpty, Step: cEmpty}, `"c","d","e"`},

@@ -121,7 +121,7 @@ func getEmptyNode() *tNode {
 	nod.Keys = nod.Keys[:0]
 	nod.Left = cNAN
 	nod.Right = cNAN
-	nod.Step = 1
+	nod.Step = cEmpty
 	nod.Next = nil
 	nod.Type = 0
 	return nod
@@ -776,8 +776,7 @@ func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 	case nod.Type&cSlice > 0: // array slice
 		result, err = getValueSlice(input, nod) // recurse inside
 	case nod.Type&cFunction > 0: // func()
-		//result, err = getValueFunc(input, nod) // no recurse
-	case nod.Type&cWild > 0:
+		result, err = doFunc(input, nod) // no recurse
 	case nod.Type&cDeep > 0:
 	default:
 		return nil, errFieldNotFound
@@ -817,49 +816,6 @@ func getValueSlice(input []byte, nod *tNode) (result []byte, err error) {
 		return nil, errObjectOrArrayExpected
 	}
 }
-
-/*
-	input = input[i:]
-	if err = looksLikeJSON(input); err != nil {
-		return nil, err
-	}
-	// wildcard
-	if nod.Type&cWild > 0 {
-		return wildScan(input, nod)
-	}
-	if len(nod.Keys) > 0 || (len(nod.Key) > 0 && nod.Key[0] != '$' && nod.Key[0] != '@') {
-		// find the key and seek to the value
-		input, err = getKeyValue(input, nod)
-		if err != nil {
-			return nil, err
-		}
-	}
-	// check value type
-	if err = checkValueType(input, nod); err != nil {
-		return nil, err
-	}
-
-	// here we are at the beginning of a value
-
-	if nod.Type&cSubject > 0 {
-		return doFunc(input, nod.Next)
-	}
-	if nod.Type&cIsTerminal > 0 {
-		return termValue(input, nod)
-	}
-	if nod.Type&cFilter > 0 {
-		return getFilteredElements(input, nod)
-	}
-	if input, err = slice(input, nod); err != nil {
-		return nil, err
-	}
-	if nod.Type&cAgg > 0 {
-		return getNodes(input, nod.Next)
-	}
-
-	return getValue(input, nod.Next)
-}
-*/
 
 func wildScan(input []byte, nod *tNode) (result []byte, err error) {
 	result = []byte{}
@@ -1122,7 +1078,7 @@ func arraySlice(input []byte, nod *tNode) ([]byte, error) {
 func arrayIterateElems(input []byte, nod *tNode) (elems []tElem, elem []byte, err error) {
 	var i, s, e int
 	l := len(input)
-	if nod.Type&cFullScan > 0 {
+	if nod.Type&(cFullScan|cWild) > 0 {
 		elems = make([]tElem, 0, 32)
 	}
 	// skip spaces before value
@@ -1141,7 +1097,7 @@ func arrayIterateElems(input []byte, nod *tNode) (elems []tElem, elem []byte, er
 		if err != nil {
 			return
 		}
-		found := nod.Type&cFullScan > 0
+		found := nod.Type&(cFullScan|cWild) > 0
 		for f := 0; !found && f < len(nod.Elems); f++ {
 			if nod.Elems[f] == pos {
 				found = true
@@ -1440,68 +1396,39 @@ func adjustBounds(start int, stop int, step int, n int) (int, int, int, error) {
 	if step == 0 || step == cEmpty {
 		step = 1
 	}
-	if step > 0 {
-		start, stop = stepPositive(start, stop, n)
-	} else {
-		start, stop = stepNegative(start, stop, n)
+	if start == cEmpty {
+		if step > 0 {
+			start = 0
+		} else {
+			start = n - 1
+		}
+	}
+	if stop < 0 {
+		stop += n
+	}
+	if stop < 0 {
+		stop = -1
+	}
+	if stop == cEmpty {
+		if step > 0 {
+			stop = n
+		} else {
+			stop = -1
+		}
+	}
+	if start < 0 {
+		start += n
+	}
+	if start < 0 {
+		start = 0
+	}
+	if start >= n {
+		start = n - 1
+	}
+	if stop > n {
+		stop = n
 	}
 	return start, stop, step, nil
-}
-
-func stepPositive(start, stop, n int) (int, int) {
-	if start == cEmpty {
-		start = 0
-	}
-	if stop == cEmpty {
-		stop = n
-	}
-	if start < 0 {
-		start += n
-	}
-	if start < 0 {
-		start = 0
-	}
-	if stop < 0 {
-		stop += n
-	}
-	if stop < 0 {
-		stop = -1
-	}
-	if start >= n {
-		start = n - 1
-	}
-	if stop >= n {
-		stop = n
-	}
-	return start, stop
-}
-
-func stepNegative(start, stop, n int) (int, int) {
-	if start == cEmpty {
-		start = n - 1
-	}
-	if stop != cEmpty && stop < 0 {
-		stop += n
-	}
-	if stop != cEmpty && stop < 0 {
-		stop = -1
-	}
-	if stop == cEmpty {
-		stop = -1
-	}
-	if start < 0 {
-		start += n
-	}
-	if start < 0 {
-		start = 0
-	}
-	if start >= n {
-		start = n - 1
-	}
-	if stop >= n {
-		stop = n
-	}
-	return start, stop
 }
 
 func seekToValue(input []byte, i int) (int, error) {
@@ -1518,7 +1445,7 @@ func seekToValue(input []byte, i int) (int, error) {
 	return skipSpaces(input, i)
 }
 
-// skips value, return i at the 1st char after the value
+// skips value, return (i) position of the 1st char after the value
 func skipValue(input []byte, i int) (int, error) {
 	var err error
 	// spaces
