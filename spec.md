@@ -149,3 +149,27 @@ ref flags:
 	- filter		- apply filter (the subject must be array)
 	- wildcard		- wildcard for object or array. Result is array.
 	- deepscan		- deepscan. Result is array
+
+array modes:
+
+	single
+		[1]     - counting scan 
+		[-1]    - fullscan & cut
+	
+	multi
+		[1,2]   - counting scan 
+		[-1,2]  - fullscan & cut
+	
+	slice
+		[:]     - [cEmpty:cEmpty] fullscan & cut
+		[2:]    - [INT:cEmpty]    fullscan & cut
+		[:5]    - [cEmpty:INT]    fullscan & cut
+		[-2:]   - [-INT:cEmpty]   fullscan & cut
+		[:-5]   - [cEmpty:-INT]   fullscan & cut
+		[2:5]   - [INT:INT]       counting scan
+		[-5:2]  - [-INT:INT]      fullscan & cut
+		[1:-3]  - [INT:-INT]      fullscan & cut
+		[-5:-3] - [-INT:-INT]     fullscan & cut
+
+	slice with step
+		fullscan & cut

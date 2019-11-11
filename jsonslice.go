@@ -60,9 +60,6 @@ func init() {
 			return &tNode{
 				Keys:  make([]word, 0),
 				Elems: make([]int, 0),
-				Left:  cNAN,
-				Right: cNAN,
-				Step:  1,
 			}
 		},
 	}
@@ -102,10 +99,23 @@ func init() {
 	errInvalidOperatorStrings = errors.New("operator is not applicable to strings")
 }
 
+type word []byte
+
+type tNode struct {
+	Key    word
+	Keys   []word
+	Type   int // properties
+	Left   int // >=0 index from the start, <0 backward index from the end
+	Right  int // 0 till the end inclusive, >0 to index exclusive, <0 backward index from the end exclusive
+	Step   int //
+	Elems  []int
+	Next   *tNode
+	Filter *tFilter
+}
+
 func getEmptyNode() *tNode {
 	nod := nodePool.Get().(*tNode)
 	nod.Elems = nod.Elems[:0]
-	nod.Exists = false
 	nod.Filter = nil
 	nod.Key = nod.Key[:0]
 	nod.Keys = nod.Keys[:0]
@@ -174,6 +184,7 @@ const (
 	cAgg        = 1 << iota // aggregating
 	cFunction   = 1 << iota // function
 	cSlice      = 1 << iota // slice array [x:y:s]
+	cFullScan   = 1 << iota // array slice: need fullscan
 	cFilter     = 1 << iota // filter
 	cWild       = 1 << iota // wildcard (*)
 	cDeep       = 1 << iota // deepscan
@@ -187,21 +198,6 @@ const (
 	cEmpty = 1 << 29 // empty number
 	cNAN   = 1 << 30 // not-a-number
 )
-
-type word []byte
-
-type tNode struct {
-	Key    word
-	Keys   []word
-	Type   int // properties
-	Left   int // >=0 index from the start, <0 backward index from the end
-	Right  int // 0 till the end inclusive, >0 to index exclusive, <0 backward index from the end exclusive
-	Step   int //
-	Elems  []int
-	Next   *tNode
-	Filter *tFilter
-	Exists bool
-}
 
 // returns true if b matches one of the elements of seq
 func bytein(b byte, seq []byte) bool {
@@ -283,7 +279,7 @@ func readRef(path []byte, i int) (*tNode, int, error) {
 	var err error
 	var next *tNode
 	var sep byte
-	var wild int
+	var flags int
 	//var sep byte
 	nod := getEmptyNode()
 
@@ -316,8 +312,8 @@ func readRef(path []byte, i int) (*tNode, int, error) {
 		return nil, i, errPathInvalidChar
 	}
 	// single key
-	nod.Key, nod.Left, sep, i, wild, err = readKey(path, i)
-	nod.Type |= wild
+	nod.Key, nod.Left, sep, i, flags, err = readKey(path, i)
+	nod.Type |= flags // cWild, cFullScan
 	if i == l {
 		return nod, i, nil
 	}
@@ -341,63 +337,70 @@ func readRef(path []byte, i int) (*tNode, int, error) {
 // consumes final ']'
 func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 	var (
-		key  []byte
-		ikey int
-		sep  byte
-		err  error
-		wild int
+		key   []byte
+		ikey  int
+		sep   byte
+		err   error
+		flags int
 	)
 	l := len(path)
 	if i < l-1 && path[i] == '?' && path[i+1] == '(' {
 		return readFilter(path, i+2, nod)
 	}
-	mode := 0
-	pos := 0
-	for i < l && path[i] != ']' {
-		key, ikey, sep, i, wild, err = readKey(path, i)
+	for pos := 0; i < l && path[i] != ']'; pos++ {
+		key, ikey, sep, i, flags, err = readKey(path, i)
+		nod.Type |= flags // cWild, cFullScan // CAUTION: [*,1,2] possible
 		if err != nil {
 			return i, err
 		}
-		mode, err = setKey(nod, mode, key, ikey, sep, pos, wild)
+		err = setKey(nod, key, ikey, sep, pos)
 		if err != nil {
 			return i, err
+		}
+		if nod.Type&(cSlice|cAgg) == cSlice|cAgg {
+			return i, errPathInvalidChar
 		}
 		if sep == ':' || sep == ',' {
 			i++
 		}
-		pos++
 	}
 	if i == l {
 		return i, errPathUnexpectedEnd
+	}
+	if nod.Type&cSlice > 0 && nod.Left+nod.Right+nod.Step == cEmpty*3 {
+		nod.Type |= cWild
 	}
 	i++ // ']'
 	return i, nil
 }
 
 // read next key
+// targeted to: ".key", ".*", ".1", ".-1"
 // returns:
-//   key  = the key
-//   ikey = integer converted key
-//   sep  = key list separator (expected , : [ ] . 0)
-//   i    = current i (after the sep)
-//   wild = cWild if wildcard
-//   err  = error
+//   key   = the key
+//   ikey  = integer converted key
+//   sep   = key list separator (expected , : [ ] . 0)
+//   i     = current i (after the sep)
+//   flags = cWild if wildcard
+//   err   = error
 func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 	l := len(path)
 	s := i
 	if i == l {
 		return nil, 0, 0, i, 0, errPathUnexpectedEnd
 	}
+	step := 0
 	bound := byte(0)
 	if bytein(path[i], []byte{'\'', '"'}) {
 		bound = path[i]
+		step++
 		i++
 	}
 	prev := byte(0)
 	if bound > 0 {
 		for i < l {
 			if prev != '\\' && path[i] == bound {
-				return path[s:i], toInt(path[s:i]), path[i], i + 1, 0, nil
+				break
 			}
 			prev = path[i]
 			i++
@@ -408,24 +411,27 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 		}
 		for i < l {
 			if bytein(path[i], keyTerminator) {
-				return path[s:i], toInt(path[s:i]), path[i], i, ifWild(i-s, path[s]), nil
+				break
 			}
 			prev = path[i]
 			i++
 		}
 	}
-	if i == l && bound == 0 {
-		// terminal key
-		return path[s:i], toInt(path[s:i]), 0, i, ifWild(i-s, path[s]), nil
+	if i != l || bound == 0 {
+		return path[s:i], toInt(path[s:i]), path[i], i + step, flags(i-s, path[s], toInt(path[s:i])), nil
 	}
 	return nil, cNAN, 0, i, 0, errPathUnexpectedEnd
 }
 
-func ifWild(n int, ch byte) int {
-	if n == 1 && ch == '*' {
-		return cWild
+func flags(n int, ch byte, ikey int) int {
+	flag := 0
+	if ikey < 0 || ikey == cEmpty {
+		flag |= cFullScan
 	}
-	return 0
+	if n == 1 && ch == '*' {
+		flag |= cWild
+	}
+	return flag
 }
 
 func toInt(buf []byte) int {
@@ -439,35 +445,27 @@ func toInt(buf []byte) int {
 	return n
 }
 
-func setKey(nod *tNode, mode int, key []byte, ikey int, sep byte, pos int, wild int) (int, error) {
+func setKey(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
 	switch sep {
 	case ']':
 		// end of key list
 	case ',':
-		if mode&cSlice > 0 {
-			return mode, errPathInvalidChar
-		}
-		mode |= cAgg
+		nod.Type |= cAgg | cDot // cDot to extract values
 	case ':':
-		if mode&cAgg > 0 {
-			return mode, errPathInvalidChar
-		}
-		mode |= cSlice
+		nod.Type |= cSlice
 	case 0:
-		return mode, errPathUnexpectedEnd
+		return errPathUnexpectedEnd
 	default:
-		return mode, errPathInvalidChar
+		return errPathInvalidChar
 	}
-	nod.Key = key
-	if mode&cAgg > 0 {
+	if nod.Type&cAgg > 0 {
 		nod.Keys = append(nod.Keys, key)
 		if ikey != cNAN {
 			nod.Elems = append(nod.Elems, ikey)
 		}
-		nod.Type &^= cDot
-	} else if mode&cSlice > 0 {
+	} else if nod.Type&cSlice > 0 {
 		if ikey == cNAN {
-			return mode, errPathInvalidChar
+			return errPathInvalidChar
 		}
 		switch pos {
 		case 0:
@@ -477,14 +475,14 @@ func setKey(nod *tNode, mode int, key []byte, ikey int, sep byte, pos int, wild 
 		case 2:
 			nod.Step = ikey
 		default:
-			return mode, errPathInvalidChar
+			return errPathInvalidChar
 		}
-		nod.Type &^= cDot
 	} else {
+		nod.Key = key
 		nod.Left = ikey
-		nod.Type |= cDot | wild
+		nod.Type |= cDot
 	}
-	return mode, nil
+	return nil
 }
 
 var pathTerminator = []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|'}
@@ -607,7 +605,7 @@ func readArrayKeys(path []byte, i int, nod *tNode) (int, error) {
 			switch part {
 			case 0:
 				nod.Left = ikey
-				nod.Type |= cSlice | cAgg
+				nod.Type |= cSlice
 			case 1:
 				nod.Right = ikey
 			case 2:
@@ -765,46 +763,64 @@ func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 	if nod == nil {
 		return input, nil
 	}
+	if len(input) == 0 {
+		return input, nil
+	}
 
 	i, _ := skipSpaces(input, 0) // we're at the value
 	input = input[i:]
 
 	switch {
-	case nod.Type&cDot > 0:
-		result, err = getValueDot(input, nod)
-	case nod.Type&cSlice > 0:
-		result, err = getValueDot(input, nod)
-	case nod.Type&cFunction > 0:
+	case nod.Type&cDot > 0: // single or multiple key
+		result, err = getValueDot(input, nod) // recurse inside
+	case nod.Type&cSlice > 0: // array slice
+		result, err = getValueSlice(input, nod) // recurse inside
+	case nod.Type&cFunction > 0: // func()
+		result, err = getValueFunc(input, nod) // no recurse
 	case nod.Type&cWild > 0:
 	case nod.Type&cDeep > 0:
 	default:
 		return nil, errFieldNotFound
 	}
-	if nod.Type&cAgg > 0 {
+	if nod.Type&(cAgg|cSlice) > 0 {
 		result = append(append([]byte{'['}, result...), byte(']'))
 	}
-	if nod.Next == nil || err != nil {
-		return result, err
-	}
-	return nil, errFieldNotFound
+	return result, err
 }
 
+// *** :
 func getValueDot(input []byte, nod *tNode) (result []byte, err error) {
 	if len(input) == 0 {
 		return nil, nil
 	}
 	switch input[0] {
 	case '{':
-		result, err = objectValueByKey(input, nod.Key)
+		result, err = objectValueByKey(input, nod) // 1+ (recurse inside)
 	case '[':
-		result, err = arrayElemByIndex(input, nod.Left)
+		result, err = arrayElemByIndex(input, nod) // 1+ (recurse inside)
 	default:
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
+	return result, err
+}
+
+// *** :
+func getValueSlice(input []byte, nod *tNode) (result []byte, err error) {
+
+	// TODO: make slice fn!
+
+	if len(input) == 0 {
+		return nil, nil
 	}
-	return getValue2(result, nod.Next)
+	switch input[0] {
+	case '{':
+		result, err = objectValueByKey(input, nod) // 1+ (recurse inside)
+	case '[':
+		result, err = arrayElemByIndex(input, nod) // 1+ (recurse inside)
+	default:
+		return nil, nil
+	}
+	return result, err
 }
 
 /*
@@ -1013,81 +1029,177 @@ func getKeyValue(input []byte, nod *tNode) ([]byte, error) {
 func objectValueByKey(input []byte, nod *tNode) ([]byte, error) {
 	var (
 		err error
-		ch  byte
-		s   int
-		e   int
+		key []byte
 	)
-	i := 1
+	i := 1 // skip '{'
 	l := len(input)
-	separator := byte('[')
-
-	ret := []byte{}
-	elems := make([][]byte, len(nod.Keys))
+	var ret []byte
+	var elems [][]byte
+	if len(nod.Keys) > 0 {
+		elems = make([][]byte, len(nod.Keys))
+	}
 
 	for i < l && input[i] != '}' {
-		state := keySeek
-		for i < l && state != keyClose {
-			ch = input[i]
-			if ch == '"' {
-				if state == keySeek {
-					state = keyOpen
-					s = i + 1
-				} else if state == keyOpen {
-					state = keyClose
-					e = i
-				}
-			}
-			i++
+		key, i, err = readObjectKey(input, i)
+		var hit bool
+		hit, i, err = keyCheck(key, input, i, nod, elems)
+		if hit {
+			return getValue2(input[i:], nod.Next)
 		}
-
-		if state == keyClose {
-			i, err = seekToValue(input, i)
-			if err != nil {
-				return nil, err
-			}
-			var hit bool
-			hit, i, err = keyCheck(input[s:e], input, i, nod, elems)
-			if hit || err != nil {
-				return input[i:], err
-			}
-		}
-	}
-	if len(elems) > 0 {
-		for i := 0; i < len(elems); i++ {
-			ret = append(ret, separator)
-			ret = append(ret, elems[i]...)
-			separator = ','
-		}
-		return append(ret, ']'), nil
-	}
-	return nil, errArrayElementNotFound
-}
-
-// ***
-func arrayElemByIndex(input []byte, i int, nod *tNode) ([]byte, error) {
-	var err error
-	l := len(input)
-	i, err = skipSpaces(input, i)
-	if err != nil {
-		return nil, err
-	}
-	ielem := 0
-	for i < l && input[i] != ']' {
-		e, err := skipValue(input, i)
 		if err != nil {
 			return nil, err
 		}
-		if ielem == nod.Left {
-			return input[i:e], nil
+	}
+	if i == l {
+		return nil, errUnexpectedEnd
+	}
+	for i := 0; i < len(elems); i++ {
+		if elems[i] != nil {
+			sub, err := getValue2(elems[i], nod.Next)
+			if err != nil {
+				return nil, err
+			}
+			if len(sub) > 0 {
+				if len(ret) > 0 {
+					ret = append(ret, ',')
+				}
+				ret = append(ret, sub...)
+			}
+		}
+	}
+	return ret, nil
+}
+
+// [x]
+// seek to key
+// read key
+// seek to value
+//
+// return key, i
+//
+func readObjectKey(input []byte, i int) ([]byte, int, error) {
+	l := len(input)
+	for input[i] != '"' {
+		i++
+		if i == l {
+			return nil, i, errUnexpectedEnd
+		}
+		if input[i] == '}' {
+			return nil, i, nil
+		}
+	}
+	s := i
+	e, err := skipString(input, i)
+	if err != nil {
+		return nil, i, err
+	}
+	i, err = seekToValue(input, e)
+	if err != nil {
+		return nil, i, err
+	}
+	return input[s:e], i, nil
+}
+
+// ***
+// get array element(s) by index
+// $[3] or $[1,2,-3]
+// recurse inside
+//
+func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
+	l := len(input)
+	var elems []tElem
+	var res []byte
+	if nod.Type&cFullScan > 0 {
+		elems = make([]tElem, 0, 32)
+	}
+	// skip spaces before value
+	i, err := skipSpaces(input, 1)
+	if err != nil {
+		return nil, err
+	}
+	for pos := 0; i < l && input[i] != ']'; {
+		s := i
+		e, err := skipValue(input, i)
+		if err != nil {
+			return nil, err
 		}
 		// skip spaces after value
 		i, err = skipSpaces(input, e)
 		if err != nil {
 			return nil, err
 		}
-		ielem++
+		found := nod.Type&cFullScan > 0
+		for f := 0; !found && f < len(nod.Elems); f++ {
+			if nod.Elems[f] == pos {
+				found = true
+			}
+		}
+		if nod.Left == pos {
+			return getValue2(input[s:e], nod.Next)
+		}
+		if found {
+			elems = append(elems, tElem{s, e})
+		}
 	}
-	return nil, errArrayElementNotFound
+	// collect & recurse
+	for i := 0; i < len(nod.Elems); i++ {
+		e := nod.Elems[i]
+		if e < 0 {
+			e += len(nod.Elems)
+		}
+		if e < len(nod.Elems) {
+			sub, err := getValue2(input[elems[i].start:elems[i].end], nod.Next)
+			if err != nil {
+				return nil, err
+			}
+			sep := []byte(nil)
+			if len(sub) > 0 {
+				res = append(append(res, sep...), sub...)
+				sep = []byte{','}
+			}
+		}
+	}
+	return res, err
+}
+
+// ***
+func arraySingleIndex(input []byte, nod *tNode) ([]byte, error) {
+	l := len(input)
+	for i, ielem := 0, 0; i < l && input[i] != ']'; ielem++ {
+		e, err := skipValue(input, i)
+		if err != nil {
+			return nil, err
+		}
+		if ielem == nod.Left {
+			return getValue2(input[i:e], nod.Next)
+		}
+		// skip spaces after value
+		i, err = skipSpaces(input, e)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return nil, nil
+}
+
+// ***
+func arrayMultiIndex(input []byte, nod *tNode) ([]byte, error) {
+	l := len(input)
+	for i, ielem := 0, 0; i < l && input[i] != ']'; ielem++ {
+		e, err := skipValue(input, i)
+		if err != nil {
+			return nil, err
+		}
+		if ielem == nod.Left {
+			return getValue2(input[i:e], nod.Next)
+		}
+		// skip spaces after value
+		i, err = skipSpaces(input, e)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return nil, nil
 }
 
 /*
@@ -1509,11 +1621,12 @@ func skipSp(input []byte, i int) (int, byte) {
 	return i, input[i]
 }
 
+// *** : skip quoted string (consumes last bound)
 func skipString(input []byte, i int) (int, error) {
 	bound := input[i]
 	done := false
 	escaped := false
-	i++
+	i++ // bound
 	l := len(input)
 	for i < l && !done {
 		ch := input[i]

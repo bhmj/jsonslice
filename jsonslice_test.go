@@ -412,6 +412,9 @@ func Test_Errors(t *testing.T) {
 		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar > "zzz")]`, `operator is not applicable to strings`},
 		// unknown token
 		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar == 2^3)]`, `unknown token at 18`},
+
+		// empty key
+		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.['']`, `empty key`},
 	}
 
 	for _, tst := range tests {
