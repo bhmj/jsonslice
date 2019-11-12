@@ -777,7 +777,6 @@ func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 		result, err = getValueSlice(input, nod) // recurse inside
 	case nod.Type&cFunction > 0: // func()
 		result, err = doFunc(input, nod) // no recurse
-	case nod.Type&cDeep > 0:
 	default:
 		return nil, errFieldNotFound
 	}
@@ -1179,7 +1178,7 @@ func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte) (bool
 	var e int
 	var err error
 
-	if bytes.EqualFold(nod.Key, key) || nod.Type&cWild > 0 {
+	if bytes.EqualFold(nod.Key, key) {
 		return true, i, nil // single key hit
 	}
 
@@ -1194,7 +1193,7 @@ func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte) (bool
 	}
 
 	for ii, k := range nod.Keys {
-		if bytes.EqualFold(k, key) {
+		if nod.Type&cWild > 0 || bytes.EqualFold(k, key) {
 			elems[ii] = input[s:e]
 			return false, i, nil
 		}
