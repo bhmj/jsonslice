@@ -958,7 +958,7 @@ func getKeyValue(input []byte, nod *tNode) ([]byte, error) {
 				return nil, err
 			}
 			var hit bool
-			hit, i, err = keyCheck(input[s:e], input, i, nod, elems)
+			i, err = keyCheck(input[s:e], input, i, nod, elems)
 			if hit || err != nil {
 				return input[i:], err
 			}
@@ -991,11 +991,16 @@ func objectValueByKey(input []byte, nod *tNode) ([]byte, error) {
 
 	for i < l && input[i] != '}' {
 		key, i, err = readObjectKey(input, i)
-		var hit bool
-		hit, i, err = keyCheck(key, input, i, nod, elems)
-		if hit {
-			return getValue2(input[i:], nod.Next)
+		if bytes.EqualFold(nod.Key, key) {
+			if nod.Type&cDeep == 0 {
+				if nod.Next == nil {
+					e, err := skipValue(input, i) // s:e holds a value
+					return input[i:e], err
+				}
+				return getValue2(input[i:], nod.Next)
+			}
 		}
+		i, err = keyCheck(key, input, i, nod, elems)
 		if err != nil {
 			return nil, err
 		}
@@ -1174,32 +1179,28 @@ func sliceRecurse(input []byte, nod *tNode, elems []tElem) ([]byte, error) {
 	 - i        =
 	 - error    =
 */
-func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte) (bool, int, error) {
+func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte) (int, error) {
 	var e int
 	var err error
-
-	if bytes.EqualFold(nod.Key, key) {
-		return true, i, nil // single key hit
-	}
 
 	s := i
 	e, err = skipValue(input, i) // s:e holds a value
 	if err != nil {
-		return false, i, err
+		return i, err
 	}
 	i, err = skipSpaces(input, e)
 	if err != nil {
-		return false, i, err
+		return i, err
 	}
 
 	for ii, k := range nod.Keys {
 		if nod.Type&cWild > 0 || bytes.EqualFold(k, key) {
 			elems[ii] = input[s:e]
-			return false, i, nil
+			return i, nil
 		}
 	}
 
-	return false, i, nil
+	return i, nil
 }
 
 type tElem struct {
