@@ -783,7 +783,7 @@ func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 	return result, err
 }
 
-// *** : $.foo, $['foo','bar'], $[1], $[1,2]
+// $.foo, $['foo','bar'], $[1], $[1,2]
 func getValueDot(input []byte, nod *tNode) (result []byte, err error) {
 	if len(input) == 0 {
 		return
@@ -806,9 +806,12 @@ func getValueSlice(input []byte, nod *tNode) (result []byte, err error) {
 	}
 	switch input[0] {
 	case '{':
-		// TODO: perform .* and recurse
+		if nod.Type&cDeep > 0 {
+			return objectDeep(input, nod)
+		}
 		return
 	case '[':
+		// TODO: deep here!
 		return arraySlice(input, nod) // 1+ (recurse inside)
 	default:
 		return nil, errObjectOrArrayExpected
@@ -1016,6 +1019,39 @@ func objectValueByKey(input []byte, nod *tNode) ([]byte, error) {
 	return ret, nil
 }
 
+func objectDeep(input []byte, nod *tNode) ([]byte, error) {
+	var (
+		err  error
+		s, e int
+		deep []byte
+	)
+	i := 1 // skip '{'
+	l := len(input)
+	var ret []byte
+
+	for i < l && input[i] != '}' {
+		_, i, err = readObjectKey(input, i)
+		if err != nil {
+			return nil, err
+		}
+		s, e, i, err = valuate(input, i) // s:e holds a value
+		if err != nil {
+			return nil, err
+		}
+		deep, err = getValue2(input[s:e], nod) // recurse
+		if err != nil {
+			return nil, err
+		}
+		if len(deep) > 0 {
+			ret = plus(ret, deep)
+		}
+	}
+	if i == l {
+		return nil, errUnexpectedEnd
+	}
+	return ret, nil
+}
+
 // [x]
 // seek to key
 // read key
@@ -1046,7 +1082,6 @@ func readObjectKey(input []byte, i int) ([]byte, int, error) {
 	return input[s:e], i, nil
 }
 
-// ***
 // get array element(s) by index
 // $[3] or $[1,2,-3]
 // $..[3] or $..[1,2,-3]
@@ -1063,6 +1098,11 @@ func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
 	return collectRecurse(input, nod, elems)
 }
 
+// get array element(s) by index
+// $[3] or $[1,2,-3]
+// $..[3] or $..[1,2,-3]
+// recurse inside
+//
 func arraySlice(input []byte, nod *tNode) ([]byte, error) {
 	elems, _, err := arrayIterateElems(input, nod)
 	if err != nil {
@@ -1178,13 +1218,11 @@ func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, ret [
 	var deep []byte
 	var val []byte
 
-	if nod.Next == nil || len(nod.Key) == 0 {
-		s, e, i, err = valuate(input, i) // s:e holds a value
-		if err != nil {
-			return elems, ret, i, err
-		}
-		val = input[s:e]
+	s, e, i, err = valuate(input, i) // s:e holds a value
+	if err != nil {
+		return elems, ret, i, err
 	}
+	val = input[s:e]
 
 	if len(nod.Key) > 0 && bytes.EqualFold(nod.Key, key) {
 		// single key match
@@ -1193,7 +1231,7 @@ func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, ret [
 				// terminal node: job done
 				return nil, val, i, err
 			}
-			ret, err = getValue2(input[i:], nod.Next) // recurse
+			ret, err = getValue2(val, nod.Next) // recurse
 			return nil, ret, i, err
 		}
 		// $..a
@@ -1202,7 +1240,7 @@ func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, ret [
 			ret = plus(ret, val)
 		} else {
 			// continue matching
-			deep, err = getValue2(input[i:], nod) // recurse
+			deep, err = getValue2(val, nod) // recurse
 			if err != nil || len(deep) == 0 {
 				return elems, ret, i, err
 			}
