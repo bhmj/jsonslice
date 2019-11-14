@@ -760,10 +760,7 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 
 func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 
-	if nod == nil {
-		return input, nil
-	}
-	if len(input) == 0 {
+	if nod == nil || len(input) == 0 {
 		return input, nil
 	}
 
@@ -773,14 +770,14 @@ func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 	switch {
 	case nod.Type&cDot > 0: // single or multiple key
 		result, err = getValueDot(input, nod) // recurse inside
-	case nod.Type&cSlice > 0: // array slice
+	case nod.Type&cSlice > 0: // array slice [::]
 		result, err = getValueSlice(input, nod) // recurse inside
 	case nod.Type&cFunction > 0: // func()
 		result, err = doFunc(input, nod) // no recurse
 	default:
 		return nil, errFieldNotFound
 	}
-	if nod.Type&(cAgg|cSlice) > 0 {
+	if nod.Type&(cAgg|cSlice|cDeep|cWild) > 0 {
 		result = append(append([]byte{'['}, result...), byte(']'))
 	}
 	return result, err
@@ -801,13 +798,15 @@ func getValueDot(input []byte, nod *tNode) (result []byte, err error) {
 	}
 }
 
-// *** : $[1:3], $[1:7:2]
+// $[1:3], $[1:7:2]
+// $..[1:3], $..[1:7:2]
 func getValueSlice(input []byte, nod *tNode) (result []byte, err error) {
 	if len(input) == 0 {
 		return
 	}
 	switch input[0] {
 	case '{':
+		// TODO: perform .* and recurse
 		return
 	case '[':
 		return arraySlice(input, nod) // 1+ (recurse inside)
@@ -958,7 +957,7 @@ func getKeyValue(input []byte, nod *tNode) ([]byte, error) {
 				return nil, err
 			}
 			var hit bool
-			i, err = keyCheck(input[s:e], input, i, nod, elems)
+			_, _, i, err = keyCheck(input[s:e], input, i, nod, elems, nil)
 			if hit || err != nil {
 				return input[i:], err
 			}
