@@ -985,24 +985,21 @@ func objectValueByKey(input []byte, nod *tNode) ([]byte, error) {
 	l := len(input)
 	var ret []byte
 	var elems [][]byte
-	if len(nod.Keys) > 0 {
+	if len(nod.Keys) > 0 || nod.Type&cDeep > 0 {
 		elems = make([][]byte, len(nod.Keys))
 	}
 
 	for i < l && input[i] != '}' {
 		key, i, err = readObjectKey(input, i)
-		if bytes.EqualFold(nod.Key, key) {
-			if nod.Type&cDeep == 0 {
-				if nod.Next == nil {
-					e, err := skipValue(input, i) // s:e holds a value
-					return input[i:e], err
-				}
-				return getValue2(input[i:], nod.Next)
-			}
-		}
-		i, err = keyCheck(key, input, i, nod, elems)
 		if err != nil {
 			return nil, err
+		}
+		elems, ret, i, err = keyCheck(key, input, i, nod, elems, ret)
+		if err != nil {
+			return nil, err
+		}
+		if nod.Type&cDot > 0 && len(ret) > 0 {
+			return ret, nil
 		}
 	}
 	if i == l {
@@ -1014,12 +1011,7 @@ func objectValueByKey(input []byte, nod *tNode) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			if len(sub) > 0 {
-				if len(ret) > 0 {
-					ret = append(ret, ',')
-				}
-				ret = append(ret, sub...)
-			}
+			ret = plus(ret, sub)
 		}
 	}
 	return ret, nil
@@ -1058,6 +1050,7 @@ func readObjectKey(input []byte, i int) ([]byte, int, error) {
 // ***
 // get array element(s) by index
 // $[3] or $[1,2,-3]
+// $..[3] or $..[1,2,-3]
 // recurse inside
 //
 func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
@@ -1079,6 +1072,12 @@ func arraySlice(input []byte, nod *tNode) ([]byte, error) {
 	return sliceRecurse(input, nod, elems)
 }
 
+//
+// iterate over array elements
+// returns
+//   elem   - for a single index
+//   elems  - for a list of indexes
+//
 func arrayIterateElems(input []byte, nod *tNode) (elems []tElem, elem []byte, err error) {
 	var i, s, e int
 	l := len(input)
@@ -1091,13 +1090,7 @@ func arrayIterateElems(input []byte, nod *tNode) (elems []tElem, elem []byte, er
 		return
 	}
 	for pos := 0; i < l && input[i] != ']'; {
-		s = i
-		e, err = skipValue(input, i)
-		if err != nil {
-			return
-		}
-		// skip spaces after value
-		i, err = skipSpaces(input, e)
+		s, e, i, err = valuate(input, i)
 		if err != nil {
 			return
 		}
@@ -1175,32 +1168,81 @@ func sliceRecurse(input []byte, nod *tNode, elems []tElem) ([]byte, error) {
 	 - nod		= current node
 	 - elems	=
 	return:
-	 - hit	    = single key hit
+	 - elems    =
+	 - ret	    =
 	 - i        =
 	 - error    =
 */
-func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte) (int, error) {
-	var e int
+func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, ret []byte) ([][]byte, []byte, int, error) {
+	var s, e int
 	var err error
+	var deep []byte
+	var val []byte
 
-	s := i
-	e, err = skipValue(input, i) // s:e holds a value
-	if err != nil {
-		return i, err
-	}
-	i, err = skipSpaces(input, e)
-	if err != nil {
-		return i, err
+	if nod.Next == nil || len(nod.Key) == 0 {
+		s, e, i, err = valuate(input, i) // s:e holds a value
+		if err != nil {
+			return elems, ret, i, err
+		}
+		val = input[s:e]
 	}
 
-	for ii, k := range nod.Keys {
-		if nod.Type&cWild > 0 || bytes.EqualFold(k, key) {
-			elems[ii] = input[s:e]
-			return i, nil
+	if len(nod.Key) > 0 && bytes.EqualFold(nod.Key, key) {
+		// single key match
+		if nod.Type&cDeep == 0 { // $.a
+			if nod.Next == nil {
+				// terminal node: job done
+				return nil, val, i, err
+			}
+			ret, err = getValue2(input[i:], nod.Next) // recurse
+			return nil, ret, i, err
+		}
+		// $..a
+		if nod.Next == nil {
+			// terminal node: add to result
+			ret = plus(ret, val)
+		} else {
+			// continue matching
+			deep, err = getValue2(input[i:], nod) // recurse
+			if err != nil || len(deep) == 0 {
+				return elems, ret, i, err
+			}
+			ret = plus(ret, deep)
+		}
+	} else {
+		// multikey
+		for ii, k := range nod.Keys {
+			if nod.Type&cWild > 0 || bytes.EqualFold(k, key) {
+				if nod.Type&cDeep > 0 {
+					ret = plus(ret, val)
+				} else {
+					elems[ii] = val
+				}
+			}
 		}
 	}
 
-	return i, nil
+	return elems, ret, i, nil
+}
+
+func valuate(input []byte, i int) (int, int, int, error) {
+	s := i
+	e, err := skipValue(input, i) // s:e holds a value
+	if err != nil {
+		return s, e, i, err
+	}
+	i, err = skipSpaces(input, e)
+	return s, e, i, err
+}
+
+func plus(ret []byte, val []byte) []byte {
+	if len(val) == 0 {
+		return ret
+	}
+	if len(ret) > 0 {
+		ret = append(ret, ',')
+	}
+	return append(ret, val...)
 }
 
 type tElem struct {
