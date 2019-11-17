@@ -138,6 +138,7 @@ func readFilter(path []byte, i int, nod *tNode) (int, error) {
 	}
 
 	nod.Filter = &tFilter{toks: reverse(result.get())}
+	nod.Type |= cFilter
 	nod.Type &^= cDot
 
 	if i < l {

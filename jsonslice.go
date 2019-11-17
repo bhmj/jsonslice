@@ -209,7 +209,7 @@ func bytein(b byte, seq []byte) bool {
 	return false
 }
 
-var keyTerminator = []byte{' ', '\t', ':', '.', '[', '(', ')', ']', '<', '=', '>', '+', '-', '*', '/', '&', '|'}
+var keyTerminator = []byte{' ', '\t', ':', '.', ',', '[', '(', ')', ']', '<', '=', '>', '+', '-', '*', '/', '&', '|'}
 
 // parse jsonpath and return a root of a linked list of nodes
 func parsePath(path []byte) (*tNode, int, error) {
@@ -280,7 +280,6 @@ func readRef(path []byte, i int) (*tNode, int, error) {
 	var next *tNode
 	var sep byte
 	var flags int
-	//var sep byte
 	nod := getEmptyNode()
 
 	l := len(path)
@@ -418,15 +417,21 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 		}
 	}
 	if i != l || bound == 0 {
-		return path[s:i], toInt(path[s:i]), path[i], i + step, flags(i-s, path[s], toInt(path[s:i])), nil
+		if i == l {
+			bound = 0
+		} else {
+			bound = path[i]
+		}
+		return path[s:i], toInt(path[s:i]), bound, i + step, flags(i-s, path[s], toInt(path[s:i])), nil
 	}
 	return nil, cNAN, 0, i, 0, errPathUnexpectedEnd
 }
 
+// flags determined by ikey
 func flags(n int, ch byte, ikey int) int {
 	flag := 0
 	if ikey < 0 || ikey == cEmpty {
-		flag |= cFullScan
+		flag |= cFullScan // fullscan if $[-1], $[1,-1] or $[1:-1] or $[1:]
 	}
 	if n == 1 && ch == '*' {
 		flag |= cWild
@@ -530,6 +535,7 @@ func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
 		return true, i, errPathUnknownFunction
 	}
 	nod.Type |= cFunction
+	nod.Type &^= cDot
 	i += 2
 	if i == len(path) {
 		nod.Type |= cIsTerminal
@@ -609,6 +615,9 @@ func readArrayKeys(path []byte, i int, nod *tNode) (int, error) {
 			case 1:
 				nod.Right = ikey
 			case 2:
+				if ikey == cEmpty || ikey == 0 { // TODO: not needed?
+					ikey = 1
+				}
 				nod.Step = ikey
 			default:
 				return i, errPathInvalidReference
@@ -774,6 +783,8 @@ func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 		result, err = getValueSlice(input, nod) // recurse inside
 	case nod.Type&cFunction > 0: // func()
 		result, err = doFunc(input, nod) // no recurse
+	case nod.Type&cFilter > 0: // [?(...)]
+		result, err = getValueFilter(input, nod) // no recurse
 	default:
 		return nil, errFieldNotFound
 	}
@@ -1083,8 +1094,9 @@ func readObjectKey(input []byte, i int) ([]byte, int, error) {
 
 // get array element(s) by index
 //
-// $[3] or $[1,2,-3]
+// $[3] or $[-3] or $[1,2,-3]
 // $..[3] or $..[1,2,-3]
+//
 // recurse inside
 //
 func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
@@ -1093,7 +1105,13 @@ func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if elem != nil {
+	if len(nod.Elems) == 0 && nod.Left < 0 { // $[-3]
+		i := len(elems) + nod.Left
+		if i >= 0 && i < len(elems) {
+			elem = input[elems[i].start:elems[i].end]
+		}
+	}
+	if elem != nil { // $[3] or $[-3]
 		if nod.Type&cDeep == 0 {
 			return getValue2(elem, nod.Next)
 		}
@@ -1102,6 +1120,7 @@ func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
 			return nil, err
 		}
 	}
+	// $[1,...] or $..[1,...]
 	return collectRecurse(input, nod, elems, res)
 }
 
@@ -1109,18 +1128,35 @@ func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
 //
 // $[:3] or $[1:5:2] or $[:]
 // $..[1:5] or $..[5:1:-1]
+//
 // recurse inside
 //
 func arraySlice(input []byte, nod *tNode) ([]byte, error) {
+	if nod.Step == cEmpty || nod.Step == 0 {
+		nod.Step = 1
+	}
 	elems, _, err := arrayIterateElems(input, nod)
 	if err != nil {
 		return nil, err
 	}
+	if len(elems) > 0 && nod.Type&(cFullScan|cIsTerminal) == cIsTerminal {
+		// 5.1)
+		return input[elems[0].start:elems[len(elems)-1].end], nil
+	}
 	return sliceRecurse(input, nod, elems)
 }
 
-//
 // iterate over array elements
+//   cases
+//     1) $[2]    cDot: nod.Left (>0)     --> seek to elem
+//     2) $[2,3]  cDot: nod.Elems (>0)    --> scan collecting elems
+//     3) $[-3]   cDot: nod.Left (<0)     --> full scan (cFullScan)
+//     4) $[2,-3] cDot: nod.Elems (<0)    --> full scan (cFullScan)
+//     5) $[1:3]  cSlice: Left < Right    --> scan up to right --> elems
+//        5.1) terminal: return input[left:right]
+//        5.2) non-term: iterate and recurse
+//     6) .....   cSlice: other           --> full scan (cFullScan), apply bounds & recurse
+//     7) cWild, cDeep:                   --> full scan (cFullScan), apply bounds & recurse
 // returns
 //   elem   - for a single index or cDeep
 //   elems  - for a list of indexes or cDeep
@@ -1128,54 +1164,68 @@ func arraySlice(input []byte, nod *tNode) ([]byte, error) {
 func arrayIterateElems(input []byte, nod *tNode) (elems []tElem, elem []byte, err error) {
 	var i, s, e int
 	l := len(input)
-	if nod.Type&(cFullScan|cWild|cDeep) > 0 {
-		elems = make([]tElem, 0, 32)
-	}
 	// skip spaces before value
 	i, err = skipSpaces(input, 1) // skip '['
 	if err != nil {
 		return
 	}
-	for pos := 0; i < l && input[i] != ']'; {
+	for pos := 0; i < l && input[i] != ']'; pos++ {
 		s, e, i, err = valuate(input, i)
 		if err != nil {
 			return
 		}
-		found := nod.Type&(cFullScan|cWild|cDeep) > 0
+		found := nod.Type&(cFullScan|cWild|cDeep) > 0 // 3) 4) 6?) 7)
 		for f := 0; !found && f < len(nod.Elems); f++ {
-			if nod.Elems[f] == pos {
+			if nod.Elems[f] == pos { // 2)
 				found = true
 			}
 		}
-		if nod.Left == pos {
+		if nod.Type&cFullScan == 0 && nod.Step == 1 { // 5)
+			found = pos >= nod.Left
+			if pos >= nod.Right {
+				break
+			}
+		} else if nod.Left == pos { // 1)
 			elem = input[s:e]
 			if nod.Type&cDeep == 0 {
-				return
+				break // found single
 			}
 		}
 		if found {
 			elems = append(elems, tElem{s, e})
+			if len(elems) == len(nod.Elems) {
+				break // $[1,2,3] --> found them all
+			}
 		}
 	}
 	return
 }
 
 // aggregate non-empty elems and possibly non-empty ret
+//
 func collectRecurse(input []byte, nod *tNode, elems []tElem, res []byte) ([]byte, error) {
 	var err error
-	// collect & recurse
+
+	if nod.Type&(cDot|cFullScan) == cDot {
+		// special case 2): elems already listed
+		for i := 0; i < len(elems); i++ {
+			res, err = subSlice(input, nod, elems, i, res) // recurse + deep
+			if err != nil {
+				return res, err
+			}
+		}
+		return res, err
+	}
+	// collect & recurse (cFullScan)
 	for i := 0; i < len(nod.Elems); i++ {
 		e := nod.Elems[i]
 		if e < 0 {
 			e += len(nod.Elems)
 		}
-		if e >= 0 && e < len(nod.Elems) {
-			sub, err := getValue2(input[elems[i].start:elems[i].end], nod.Next)
+		if e >= 0 && e < len(elems) {
+			res, err = subSlice(input, nod, elems, e, res) // recurse + deep
 			if err != nil {
-				return nil, err
-			}
-			if len(sub) > 0 {
-				res = plus(res, sub)
+				return res, err
 			}
 		}
 	}
@@ -1183,33 +1233,54 @@ func collectRecurse(input []byte, nod *tNode, elems []tElem, res []byte) ([]byte
 }
 
 // slice requested elements
+//
 // recurse on each element
+//
 // deepscan on each element if needed
 func sliceRecurse(input []byte, nod *tNode, elems []tElem) ([]byte, error) {
 	var res []byte
-	var sub []byte
 	var err error
 	a, b, step, err := adjustBounds(nod.Left, nod.Right, nod.Step, len(elems))
 	if err != nil {
 		return nil, err
 	}
-	// collect & recurse
-	for ; (a > b && step < 0) || (a < b && step > 0); a += step {
-		sub, err = getValue2(input[elems[a].start:elems[a].end], nod.Next)
-		if err != nil {
-			return nil, err
+	if nod.Type&cWild > 0 {
+		a, b, step = 0, len(elems), 1
+	}
+	if nod.Type&(cFullScan|cDeep|cWild) > 0 {
+		for ; (a > b && step < 0) || (a < b && step > 0); a += step {
+			res, err = subSlice(input, nod, elems, a, res)
+			if err != nil {
+				return nil, err
+			}
 		}
-		if len(sub) > 0 {
-			res = plus(res, sub)
-		}
-		if nod.Type&cDeep > 0 {
-			sub, err = getValue2(input[elems[a].start:elems[a].end], nod) // deep
-			if len(sub) > 0 {
-				res = plus(res, sub)
+	} else {
+		// 5.2) special case: elems already filtered
+		for i := 0; i < len(elems); i++ {
+			res, err = subSlice(input, nod, elems, i, res)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
 	return res, err
+}
+
+func subSlice(input []byte, nod *tNode, elems []tElem, i int, res []byte) ([]byte, error) {
+	sub, err := getValue2(input[elems[i].start:elems[i].end], nod.Next)
+	if err != nil {
+		return nil, err
+	}
+	if len(sub) > 0 {
+		res = plus(res, sub)
+	}
+	if nod.Type&cDeep > 0 {
+		sub, err = getValue2(input[elems[i].start:elems[i].end], nod) // deep
+		if len(sub) > 0 {
+			res = plus(res, sub)
+		}
+	}
+	return res, nil
 }
 
 /*
@@ -1631,16 +1702,11 @@ func doFunc(input []byte, nod *tNode) ([]byte, error) {
 			l := len(input)
 			// count elements
 			for i < l && input[i] != ']' {
-				e, err := skipValue(input, i)
+				_, _, i, err = valuate(input, i)
 				if err != nil {
 					return nil, err
 				}
 				result++
-				// skip spaces after value
-				i, err = skipSpaces(input, e)
-				if err != nil {
-					return nil, err
-				}
 			}
 		} else {
 			return nil, errInvalidLengthUsage
