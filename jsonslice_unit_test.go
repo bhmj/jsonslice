@@ -98,7 +98,7 @@ func Test_sliceRecurse(t *testing.T) {
 		// [1::2]
 		{&tNode{Left: 1, Right: cEmpty, Step: 2}, `"b","d"`},
 
-		// slice + step
+		// slice + negative step
 		// [::-1]
 		{&tNode{Left: cEmpty, Right: cEmpty, Step: -1}, `"e","d","c","b","a"`},
 		// [2::-1]
