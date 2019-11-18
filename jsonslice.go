@@ -788,7 +788,7 @@ func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 	default:
 		return nil, errFieldNotFound
 	}
-	if nod.Type&(cAgg|cSlice|cDeep|cWild) > 0 {
+	if nod.Type&(cAgg|cSlice|cDeep|cWild|cFilter) > 0 {
 		result = append(append([]byte{'['}, result...), byte(']'))
 	}
 	return result, err
@@ -826,6 +826,50 @@ func getValueSlice(input []byte, nod *tNode) (result []byte, err error) {
 	default:
 		return nil, errObjectOrArrayExpected
 	}
+}
+
+func getValueFilter(input []byte, nod *tNode) ([]byte, error) {
+	if len(input) == 0 {
+		return nil, errUnexpectedEnd
+	}
+	switch input[0] {
+	case '{':
+		if nod.Type&cDeep > 0 {
+			return objectDeep(input, nod) // (recurse inside) (+deep)
+		}
+		return nil, nil
+	case '[':
+		return arrayElemByFilter(input, nod) // 1+ (recurse inside)
+	default:
+		return nil, errObjectOrArrayExpected
+	}
+}
+
+// TODO: deep
+func arrayElemByFilter(input []byte, nod *tNode) (result []byte, err error) {
+	var s, e int
+	var b bool
+	var sub []byte
+	i := 1 // skip '['
+	l := len(input)
+
+	for i < l && input[i] != ']' {
+		s, e, i, err = valuate(input, i)
+		if err != nil {
+			return nil, err
+		}
+		b, err = filterMatch(input[s:e], nod.Filter.toks)
+		if err != nil {
+			return nil, err
+		}
+		if b {
+			sub, err = getValue2(input[s:e], nod.Next) // recurse
+			if len(sub) > 0 {
+				result = plus(result, input[s:e])
+			}
+		}
+	}
+	return result, err
 }
 
 func wildScan(input []byte, nod *tNode) (result []byte, err error) {
