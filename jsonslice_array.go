@@ -38,7 +38,7 @@ func GetArrayElements(input []byte, path string, alloc int) ([][]byte, error) {
 		}
 		if n.Filter != nil {
 			for _, tok := range n.Filter.toks {
-				if tok.Operand != nil && tok.Operand.Node != nil && len(tok.Operand.Node.Key) == 1 && tok.Operand.Node.Key[0] == '$' {
+				if tok.Operand != nil && tok.Operand.Node != nil && tok.Operand.Type&cRoot > 0 {
 					val, err := getValue(input, tok.Operand.Node)
 					if err != nil {
 						// not found or other error
@@ -63,10 +63,10 @@ func getValueAE(input []byte, nod *tNode, alloc int) (result [][]byte, err error
 		return nil, err
 	}
 	// wildcard
-	if len(nod.Key) == 1 && nod.Key[0] == '*' {
+	if nod.Type&cWild > 0 {
 		return nil, errWildcardsNotSupported
 	}
-	if len(nod.Keys) > 0 || (len(nod.Key) > 0 && !bytein(nod.Key[0], []byte{'$', '@'})) {
+	if len(nod.Keys) > 0 {
 		// find the key and seek to the value
 		if input, err = getKeyValue(input, nod); err != nil {
 			return nil, err

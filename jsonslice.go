@@ -102,7 +102,7 @@ func init() {
 type word []byte
 
 type tNode struct {
-	Key    word
+	//Key    word
 	Keys   []word
 	Type   int // properties
 	Left   int // >=0 index from the start, <0 backward index from the end
@@ -117,7 +117,7 @@ func getEmptyNode() *tNode {
 	nod := nodePool.Get().(*tNode)
 	nod.Elems = nod.Elems[:0]
 	nod.Filter = nil
-	nod.Key = nod.Key[:0]
+	//nod.Key = nod.Key[:0]
 	nod.Keys = nod.Keys[:0]
 	nod.Left = cNAN
 	nod.Right = cNAN
@@ -159,8 +159,8 @@ func Get(input []byte, path string) ([]byte, error) {
 		}
 		if n.Filter != nil {
 			for _, tok := range n.Filter.toks {
-				if tok.Operand != nil && tok.Operand.Node != nil && len(tok.Operand.Node.Key) == 1 && tok.Operand.Node.Key[0] == '$' {
-					val, err := getValue(input, tok.Operand.Node)
+				if tok.Operand != nil && tok.Operand.Node != nil && tok.Operand.Node.Type&cRoot > 0 {
+					val, err := getValue2(input, tok.Operand.Node)
 					if err != nil {
 						// not found or other error
 						tok.Operand.Type = cOpNull
@@ -209,7 +209,7 @@ func bytein(b byte, seq []byte) bool {
 	return false
 }
 
-var keyTerminator = []byte{' ', '\t', ':', '.', ',', '[', '(', ')', ']', '<', '=', '>', '+', '-', '*', '/', '&', '|'}
+var keyTerminator = []byte{' ', '\t', ':', '.', ',', '[', '(', ')', ']', '<', '=', '>', '+', '-', '*', '/', '&', '|', '!'}
 
 // parse jsonpath and return a root of a linked list of nodes
 func parsePath(path []byte) (*tNode, int, error) {
@@ -236,7 +236,7 @@ func parsePath(path []byte) (*tNode, int, error) {
 	} else {
 		for ; i < l && !bytein(path[i], keyTerminator); i++ {
 		}
-		nod.Key = path[:i]
+		nod.Keys = []word{path[:i]}
 	}
 
 	if i == l {
@@ -247,18 +247,6 @@ func parsePath(path []byte) (*tNode, int, error) {
 
 	// get node type and also get Keys if specified
 	done, i, err = nodeType(path, i, nod)
-	if len(nod.Key) == 0 && len(nod.Keys) == 1 {
-		nod.Key = nod.Keys[0]
-		nod.Keys = nil
-	}
-	if len(nod.Key) != 0 && len(nod.Keys) > 0 {
-		mid := nod
-		nod := getEmptyNode()
-		nod.Keys = mid.Keys
-		nod.Type = mid.Type
-		mid.Type = mid.Type & (^cIsTerminal)
-		mid.Next = nod
-	}
 	if done || err != nil {
 		return nod, i, err
 	}
@@ -280,6 +268,12 @@ func readRef(path []byte, i int) (*tNode, int, error) {
 	var next *tNode
 	var sep byte
 	var flags int
+	var key word
+
+	// path end?
+	if bytein(path[i], pathTerminator) {
+		return nil, i, nil
+	}
 	nod := getEmptyNode()
 
 	l := len(path)
@@ -311,7 +305,8 @@ func readRef(path []byte, i int) (*tNode, int, error) {
 		return nil, i, errPathInvalidChar
 	}
 	// single key
-	nod.Key, nod.Left, sep, i, flags, err = readKey(path, i)
+	key, nod.Left, sep, i, flags, err = readKey(path, i)
+	nod.Keys = []word{key}
 	nod.Type |= flags // cWild, cFullScan
 	if i == l {
 		return nod, i, nil
@@ -483,14 +478,14 @@ func setKey(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
 			return errPathInvalidChar
 		}
 	} else {
-		nod.Key = key
+		nod.Keys = []word{key}
 		nod.Left = ikey
 		nod.Type |= cDot
 	}
 	return nil
 }
 
-var pathTerminator = []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|'}
+var pathTerminator = []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|', '!'}
 
 func nodeType(path []byte, i int, nod *tNode) (bool, int, error) {
 	var err error
@@ -529,9 +524,9 @@ func nodeType(path []byte, i int, nod *tNode) (bool, int, error) {
 }
 
 func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
-	if !(bytes.EqualFold(nod.Key, []byte("length")) ||
-		bytes.EqualFold(nod.Key, []byte("count")) ||
-		bytes.EqualFold(nod.Key, []byte("size"))) {
+	if !(bytes.EqualFold(nod.Keys[0], []byte("length")) ||
+		bytes.EqualFold(nod.Keys[0], []byte("count")) ||
+		bytes.EqualFold(nod.Keys[0], []byte("size"))) {
 		return true, i, errPathUnknownFunction
 	}
 	nod.Type |= cFunction
@@ -734,7 +729,7 @@ func getValue(input []byte, nod *tNode) (result []byte, err error) {
 	if nod.Type&cWild > 0 {
 		return wildScan(input, nod)
 	}
-	if len(nod.Keys) > 0 || (len(nod.Key) > 0 && nod.Key[0] != '$' && nod.Key[0] != '@') {
+	if len(nod.Keys) > 0 {
 		// find the key and seek to the value
 		input, err = getKeyValue(input, nod)
 		if err != nil {
@@ -865,7 +860,7 @@ func arrayElemByFilter(input []byte, nod *tNode) (result []byte, err error) {
 		if b {
 			sub, err = getValue2(input[s:e], nod.Next) // recurse
 			if len(sub) > 0 {
-				result = plus(result, input[s:e])
+				result = plus(result, sub)
 			}
 		}
 	}
@@ -1063,11 +1058,7 @@ func objectValueByKey(input []byte, nod *tNode) ([]byte, error) {
 	}
 	for i := 0; i < len(elems); i++ {
 		if elems[i] != nil {
-			sub, err := getValue2(elems[i], nod.Next)
-			if err != nil {
-				return nil, err
-			}
-			res = plus(res, sub)
+			res = plus(res, elems[i])
 		}
 	}
 	return res, nil
@@ -1335,15 +1326,14 @@ func subSlice(input []byte, nod *tNode, elems []tElem, i int, res []byte) ([]byt
 	 - nod		= current node
 	 - elems	=
 	return:
-	 - elems    =
-	 - res	    =
+	 - elems    = multikey or wild
+	 - res	    = single key or deep
 	 - i        =
 	 - error    =
 */
 func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, res []byte) ([][]byte, []byte, int, error) {
 	var s, e int
 	var err error
-	var deep []byte
 	var val []byte
 
 	s, e, i, err = valuate(input, i) // s:e holds a value
@@ -1352,42 +1342,47 @@ func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, res [
 	}
 	val = input[s:e]
 
-	if len(nod.Key) > 0 && bytes.EqualFold(nod.Key, key) {
-		// single key match
-		if nod.Type&cDeep == 0 { // $.a
-			if nod.Next == nil {
-				// terminal node: job done
-				return nil, val, i, err
-			}
-			res, err = getValue2(val, nod.Next) // recurse
-			return nil, res, i, err
-		}
-		// $..a
-		if nod.Next == nil {
-			// terminal node: add to result
-			res = plus(res, val)
-		} else {
-			// continue matching
-			deep, err = getValue2(val, nod) // recurse
-			if err != nil || len(deep) == 0 {
-				return elems, res, i, err
-			}
-			res = plus(res, deep)
-		}
+	if nod.Type&cWild > 0 {
+		elems, res, err = processKey(nod, nil, key, val, elems, res)
 	} else {
-		// multikey
-		for ii, k := range nod.Keys {
-			if nod.Type&cWild > 0 || bytes.EqualFold(k, key) {
-				if nod.Type&cDeep > 0 {
-					res = plus(res, val)
-				} else {
-					elems[ii] = val
-				}
-			}
+		for ii := range nod.Keys {
+			elems, res, err = processKey(nod, nod.Keys[ii], key, val, elems, res)
 		}
 	}
 
 	return elems, res, i, nil
+}
+
+func processKey(nod *tNode, nodkey []byte, key []byte, val []byte, elems [][]byte, res []byte) ([][]byte, []byte, error) {
+	var err error
+	var deep []byte
+	var sub []byte
+	match := bytes.EqualFold(nodkey, key)
+	if nod.Type&(cWild|cDeep) > 0 || match {
+		// key match
+		if nod.Type&cDeep == 0 { // $.a  $.a.x  $[a,b]  $.*
+			if len(nod.Keys) == 1 {
+				// $.a  $.a.x
+				res, err = getValue2(val, nod.Next) // recurse
+				return elems, res, err
+			}
+			// $[a,b]  $[a,b].x  $.*
+			sub, err = getValue2(val, nod.Next)
+			if len(sub) > 0 {
+				elems = append(elems, sub)
+			}
+		} else { // deep: $..a  $..[a,b]
+			if match {
+				res = plus(res, val)
+			}
+			// we need to go deeper
+			deep, err = getValue2(val, nod) // deepscan
+			if len(deep) > 0 {
+				res = plus(res, deep)
+			}
+		}
+	}
+	return elems, res, err
 }
 
 func valuate(input []byte, i int) (int, int, int, error) {
@@ -1736,9 +1731,9 @@ func checkValueType(input []byte, nod *tNode) error {
 func doFunc(input []byte, nod *tNode) ([]byte, error) {
 	var err error
 	var result int
-	if bytes.Equal(word("size"), nod.Key) {
+	if bytes.Equal(word("size"), nod.Keys[0]) {
 		result, err = skipValue(input, 0)
-	} else if bytes.Equal(word("length"), nod.Key) || bytes.Equal(word("count"), nod.Key) {
+	} else if bytes.Equal(word("length"), nod.Keys[0]) || bytes.Equal(word("count"), nod.Keys[0]) {
 		if input[0] == '"' {
 			result, err = skipString(input, 0)
 		} else if input[0] == '[' {

@@ -199,73 +199,75 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.book[1:].isbn`, []byte(`["0-553-21311-3","0-395-19395-8"]`)},
 		// aggregated, enumerate indexes
 		{`$.store.book[0,2].title`, []byte(`["Sayings of the Century","Moby Dick"]`)},
-		*/
+
 		// filters: simple expression
 		{`$.store.book[?(@.price>10)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
+		// filters: simple expression + spaces
+		{`$.store.book[?( @.price < 10 )].title`, []byte(`["Sayings of the Century","Moby Dick"]`)},
+		// filters: simple expression
+		{`$.store.book[?(@.price==12.99)].title`, []byte(`["Sword of Honour"]`)},
+		// more spaces
+		{`$.store.book[?(   @.price   >   10  )].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
+
+		// field presence
+		{`$.store.book[?(@.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
+		// string match
+		{`$.store.book[?(@.isbn == "0-553-21311-3")].title`, []byte(`["Moby Dick"]`)},
+		// string mismatch
+		{`$.store.book[?(@.isbn != "0-553-21311-3")].title`, []byte(`["The Lord of the Rings"]`)},
+		// root references
+		{`$.store.book[?(@.price > $.expensive)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
+		// math +
+		{`$.store.book[?(@.price > $.expensive+1)].price`, []byte(`[12.99,22.99]`)},
+		// math -
+		{`$.store.book[?(@.price > $.expensive-1)].price`, []byte(`[12.99,22.99]`)},
+		// math *
+		{`$.store.book[?(@.price > $.expensive*1.1)].price`, []byte(`[12.99,22.99]`)},
+		// math /
+		{`$.store.book[?(@.price > $.expensive/0.7)].price`, []byte(`[22.99]`)},
+		// logic operators : AND
+		{`$.store.book[?(@.price > $.expensive && @.isbn)].title`, []byte(`["The Lord of the Rings"]`)},
+		// logic operators : OR
+		{`$.store.book[?(@.price >= $.expensive || @.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
+		// logic operators : AND/OR numbers, strings
+		{`$.store.book[?(@.price || @.isbn != "")].title`, []byte(`["Sayings of the Century","Sword of Honour","Moby Dick","The Lord of the Rings"]`)},
+		// logic operators : same as above, for coverage's sake
+		{`$.store.book[?(@.isbn != "" || @.price)].title`, []byte(`["Sayings of the Century","Sword of Honour","Moby Dick","The Lord of the Rings"]`)},
+		// non-empty field
+		{`$.store.book[?(@.price)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
+		// bool ==
+		{`$.store.book[?($.store.open == true)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
+		// bool !=
+		{`$.store.book[?($.store.open != false)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
+		// bool <
+		{`$.store.book[?($.store.open > false)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
+		// bool >
+		{`$.store.book[?($.store.open < true)].price`, []byte(`[]`)},
+		// escaped chars
+		{`$.store.bicycle.equipment[?(@[0] == "\"quoted\"")]`, []byte(`[["\"quoted\""]]`)},
+		// numbers
+		{`$.store.book[?(20 <= @.price)].title`, []byte(`["The Lord of the Rings"]`)},
+		// numbers (+)
+		{`$.store.book[?(@.price != 22.99)].price`, []byte(`[8.95,12.99,8.99]`)},
+
+		// regexp
+		{`$.store.book[?(@.title =~ /the/i)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
+		// regexp
+		{`$.store.book[?(@.title =~ /(Saying)|(Lord)/)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
+
+		// array of arrays
+		{`$.store.bicycle.equipment[1][0]`, []byte(`"peg leg"`)},
+		// filter expression not found -- not an error
+		//{`$.store.book[?($.store[0] > 0)]`, []byte(`[]`)},
+		*/
+		// wildcard: any key within an object
+		{`$.store.book[0].*`, []byte(`["reference","Nigel Rees","Sayings of the Century",8.95]`)},
+		// wildcard: named key on a given level
+		{`$.store.*.price`, []byte(`[19.95]`)},
+		// wildcard: named key in any array on a given level
+		{`$.store.*[:].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
+
 		/*
-			// filters: simple expression + spaces
-			{`$.store.book[?( @.price < 10 )].title`, []byte(`["Sayings of the Century","Moby Dick"]`)},
-			// filters: simple expression
-			{`$.store.book[?(@.price==12.99)].title`, []byte(`["Sword of Honour"]`)},
-			// more spaces
-			{`$.store.book[?(   @.price   >   10  )].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
-			// field presence
-			{`$.store.book[?(@.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
-			// string match
-			{`$.store.book[?(@.isbn == "0-553-21311-3")].title`, []byte(`["Moby Dick"]`)},
-			// string mismatch
-			{`$.store.book[?(@.isbn != "0-553-21311-3")].title`, []byte(`["The Lord of the Rings"]`)},
-			// root references
-			{`$.store.book[?(@.price > $.expensive)].title`, []byte(`["Sword of Honour","The Lord of the Rings"]`)},
-			// math +
-			{`$.store.book[?(@.price > $.expensive+1)].price`, []byte(`[12.99,22.99]`)},
-			// math -
-			{`$.store.book[?(@.price > $.expensive-1)].price`, []byte(`[12.99,22.99]`)},
-			// math *
-			{`$.store.book[?(@.price > $.expensive*1.1)].price`, []byte(`[12.99,22.99]`)},
-			// math /
-			{`$.store.book[?(@.price > $.expensive/0.7)].price`, []byte(`[22.99]`)},
-			// logic operators : AND
-			{`$.store.book[?(@.price > $.expensive && @.isbn)].title`, []byte(`["The Lord of the Rings"]`)},
-			// logic operators : OR
-			{`$.store.book[?(@.price >= $.expensive || @.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
-			// logic operators : AND/OR numbers, strings
-			{`$.store.book[?(@.price || @.isbn != "")].title`, []byte(`["Sayings of the Century","Sword of Honour","Moby Dick","The Lord of the Rings"]`)},
-			// logic operators : same as above, for coverage's sake
-			{`$.store.book[?(@.isbn != "" || @.price)].title`, []byte(`["Sayings of the Century","Sword of Honour","Moby Dick","The Lord of the Rings"]`)},
-			// non-empty field
-			{`$.store.book[?(@.price)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
-			// bool ==
-			{`$.store.book[?($.store.open == true)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
-			// bool !=
-			{`$.store.book[?($.store.open != false)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
-			// bool <
-			{`$.store.book[?($.store.open > false)].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
-			// bool >
-			{`$.store.book[?($.store.open < true)].price`, []byte(``)},
-			// escaped chars
-			{`$.store.bicycle.equipment[?(@[0] == "\"quoted\"")]`, []byte(`[["\"quoted\""]]`)},
-			// numbers
-			{`$.store.book[?(20 <= @.price)].title`, []byte(`["The Lord of the Rings"]`)},
-			// numbers (+)
-			{`$.store.book[?(@.price != 22.99)].price`, []byte(`[8.95,12.99,8.99]`)},
-
-			// regexp
-			{`$.store.book[?(@.title =~ /the/i)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
-			// regexp
-			{`$.store.book[?(@.title =~ /(Saying)|(Lord)/)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
-
-			// array of arrays
-			{`$.store.bicycle.equipment[1][0]`, []byte(`"peg leg"`)},
-			// filter expression not found -- not an error
-			{`$.store.book[?($.store[0] > 0)]`, []byte(`[]`)},
-			// wildcard: any key within an object
-			{`$.store.book[0].*`, []byte(`["reference","Nigel Rees","Sayings of the Century",8.95]`)},
-			// wildcard: named key on a given level
-			{`$.store.*.price`, []byte(`[19.95]`)},
-			// wildcard: named key in any array on a given level
-			{`$.store.*[:].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
-
 			// all elements of an empty array is an empty array
 			{`$.store.manager[:]`, []byte(`[]`)},
 
