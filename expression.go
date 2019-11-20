@@ -189,7 +189,7 @@ func tokComplex(path []byte, i int) (int, *tToken, error) {
 	l := len(path)
 	// jsonpath node
 	if path[i] == '@' || path[i] == '$' {
-		nod, j, err := readRef(path[i:], 1)
+		nod, j, err := readRef(path[i:], 1, 0)
 		if err != nil {
 			return 0, nil, err
 		}

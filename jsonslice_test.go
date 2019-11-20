@@ -121,7 +121,7 @@ func TestFuzzyPath(t *testing.T) {
 		n := rand.Intn(len(b))
 		b[0] = '$'
 		str = string(b[:n])
-		parsePath([]byte(str))
+		readRef([]byte(str), 1, 0)
 	}
 	fmt.Println()
 }
@@ -172,7 +172,7 @@ func Test_Expressions(t *testing.T) {
 		Query    string
 		Expected []byte
 	}{
-		/* self
+		// self
 		{`$`, data},
 		// simple query
 		{`$.expensive`, []byte(`10`)},
@@ -259,7 +259,7 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.bicycle.equipment[1][0]`, []byte(`"peg leg"`)},
 		// filter expression not found -- not an error
 		//{`$.store.book[?($.store[0] > 0)]`, []byte(`[]`)},
-		*/
+
 		// wildcard: any key within an object
 		{`$.store.book[0].*`, []byte(`["reference","Nigel Rees","Sayings of the Century",8.95]`)},
 		// wildcard: named key on a given level
@@ -267,12 +267,12 @@ func Test_Expressions(t *testing.T) {
 		// wildcard: named key in any array on a given level
 		{`$.store.*[:].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
 
+		// all elements of an empty array is an empty array
+		{`$.store.manager[:]`, []byte(`[]`)},
+		// multiple keys (ordered as in query)
+		{`$.store.book[:]['price','title']`, []byte(`[[8.95,"Sayings of the Century"],[12.99,"Sword of Honour"],[8.99,"Moby Dick"],[22.99,"The Lord of the Rings"]]`)},
 		/*
-			// all elements of an empty array is an empty array
-			{`$.store.manager[:]`, []byte(`[]`)},
 
-			// multiple keys (ordered as in query)
-			{`$.store.book[:]['price','title']`, []byte(`[[8.95,"Sayings of the Century"],[12.99,"Sword of Honour"],[8.99,"Moby Dick"],[22.99,"The Lord of the Rings"]]`)},
 			// multiple keys combined with filter
 			{`$.store.book[?(@.price > $.expensive*1.1)]['price','title']`, []byte(`[[12.99,"Sword of Honour"],[22.99,"The Lord of the Rings"]]`)},
 
@@ -557,7 +557,7 @@ func Benchmark_JsonSlice_ParsePath(b *testing.B) {
 	nodePool.Put(nodePool.Get())
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		node, _, _ := parsePath(path)
+		node, _, _ := readRef(path, 1, 0)
 		// return nodes back to pool
 		for {
 			if node == nil {

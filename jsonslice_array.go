@@ -25,7 +25,7 @@ func GetArrayElements(input []byte, path string, alloc int) ([][]byte, error) {
 		return nil, errPathRootExpected
 	}
 
-	node, _, err := parsePath([]byte(path))
+	node, _, err := readRef([]byte(path), 1, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func GetArrayElements(input []byte, path string, alloc int) ([][]byte, error) {
 		if n.Filter != nil {
 			for _, tok := range n.Filter.toks {
 				if tok.Operand != nil && tok.Operand.Node != nil && tok.Operand.Type&cRoot > 0 {
-					val, err := getValue(input, tok.Operand.Node)
+					val, err := getValue2(input, tok.Operand.Node)
 					if err != nil {
 						// not found or other error
 						tok.Operand.Type = cOpNull
@@ -59,9 +59,9 @@ func getValueAE(input []byte, nod *tNode, alloc int) (result [][]byte, err error
 	i, _ := skipSpaces(input, 0)
 
 	input = input[i:]
-	if err = looksLikeJSON(input); err != nil {
-		return nil, err
-	}
+	// if err = looksLikeJSON(input); err != nil {
+	// 	return nil, err
+	// }
 	// wildcard
 	if nod.Type&cWild > 0 {
 		return nil, errWildcardsNotSupported
@@ -73,9 +73,9 @@ func getValueAE(input []byte, nod *tNode, alloc int) (result [][]byte, err error
 		}
 	}
 	// check value type
-	if err = checkValueType(input, nod); err != nil {
-		return nil, err
-	}
+	// if err = checkValueType(input, nod); err != nil {
+	// 	return nil, err
+	// }
 
 	// here we are at the beginning of a value
 
