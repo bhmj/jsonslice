@@ -11,6 +11,7 @@ package jsonslice
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"strconv"
 	"sync"
@@ -219,6 +220,10 @@ func readRef(path []byte, i int, uptype int) (*tNode, int, error) {
 	var flags int
 	var key word
 
+	if i >= len(path) {
+		return nil, i, nil
+	}
+
 	// path end?
 	if bytein(path[i], pathTerminator) {
 		return nil, i, nil
@@ -330,6 +335,7 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 	l := len(path)
 	s := i
+	e := i
 	if i == l {
 		return nil, 0, 0, i, 0, errPathUnexpectedEnd
 	}
@@ -337,18 +343,13 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 	bound := byte(0)
 	if bytein(path[i], []byte{'\'', '"'}) {
 		bound = path[i]
-		step++
+		step++ // will be a closing bound
+		s++    // start 1 char right
 		i++
 	}
-	prev := byte(0)
+	//prev := byte(0)
 	if bound > 0 {
-		for i < l {
-			if prev != '\\' && path[i] == bound {
-				break
-			}
-			prev = path[i]
-			i++
-		}
+		s, e, i = readQuotedKey(path, i, bound)
 	} else {
 		if path[i] == '-' {
 			i++
@@ -356,13 +357,13 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 		for i < l {
 			if bytein(path[i], keyTerminator) {
 				if path[i] == '*' && s-i == 0 {
-					step++
+					step++ // * usually * is a terminator but not in .* so skip it
 				}
 				break
 			}
-			prev = path[i]
 			i++
 		}
+		e = i
 	}
 	/*
 		i!=l bound=0  // (unbounded) terminator reached s:i (empty for * -> step)
@@ -379,7 +380,37 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 	} else {
 		bound = 0
 	}
-	return path[s:i], toInt(path[s:i]), bound, i + step, flags(i-s, path[s], toInt(path[s:i])), nil
+	return path[s:e], toInt(path[s:e]), bound, i + step, flags(e-s, path[s], toInt(path[s:e])), nil
+}
+
+// read quotedkey
+// return
+//   s start index
+//   e end index
+//   i current pointer
+//
+func readQuotedKey(path []byte, i int, bound byte) (int, int, int) {
+	l := len(path)
+	s := i
+	w := i
+	var prev byte
+
+	for i < l {
+		if path[i] == bound {
+			if prev == '\\' {
+				w--
+			} else {
+				break
+			}
+		}
+		if i != w {
+			path[w] = path[i]
+		}
+		prev = path[i]
+		i++
+		w++
+	}
+	return s, w, i
 }
 
 // flags determined by ikey
@@ -434,6 +465,9 @@ func setKey(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
 			nod.Right = ikey
 		case 2:
 			nod.Step = ikey
+			if ikey != 1 {
+				nod.Type |= cFullScan
+			}
 		default:
 			return errPathInvalidChar
 		}
@@ -450,6 +484,9 @@ func setKey(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
 var pathTerminator = []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|', '!'}
 
 func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
+	if len(nod.Keys) == 0 {
+		return true, i, errPathUnknownFunction
+	}
 	if !(bytes.EqualFold(nod.Keys[0], []byte("length")) ||
 		bytes.EqualFold(nod.Keys[0], []byte("count")) ||
 		bytes.EqualFold(nod.Keys[0], []byte("size"))) {
@@ -467,14 +504,15 @@ func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
 func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 
 	if nod == nil || len(input) == 0 {
-		return input, nil
+		return input[0:len(input):len(input)], nil
 	}
 
 	i, _ := skipSpaces(input, 0) // we're at the value
 	input = input[i:]
 
+	typ := nod.Type
 	switch {
-	case nod.Type&cDot > 0: // single or multiple key
+	case nod.Type&(cDot|cDeep) > 0: // single or multiple key
 		result, err = getValueDot(input, nod) // recurse inside
 	case nod.Type&cSlice > 0: // array slice [::]
 		result, err = getValueSlice(input, nod) // recurse inside
@@ -485,7 +523,7 @@ func getValue2(input []byte, nod *tNode) (result []byte, err error) {
 	default:
 		return nil, errFieldNotFound
 	}
-	if nod.Type&(cAgg|cSlice|cDeep|cWild|cFilter) > 0 && nod.Type&cSubAgg == 0 {
+	if typ&(cAgg|cSlice|cDeep|cWild|cFilter) > 0 && typ&cSubAgg == 0 {
 		result = append(append([]byte{'['}, result...), byte(']'))
 	}
 	return result, err
@@ -737,6 +775,9 @@ func readObjectKey(input []byte, i int) ([]byte, int, error) {
 //
 func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
 	var res []byte
+	if nod.Step == cEmpty || nod.Step == 0 { // TODO: move to readRef
+		nod.Step = 1
+	}
 	elems, elem, err := arrayIterateElems(input, nod)
 	if err != nil {
 		return nil, err
@@ -748,12 +789,9 @@ func arrayElemByIndex(input []byte, nod *tNode) ([]byte, error) {
 		}
 	}
 	if elem != nil { // $[3] or $[-3]
-		if nod.Type&cDeep == 0 {
-			return getValue2(elem, nod.Next)
-		}
-		res, err = getValue2(elem, nod) // deep
-		if err != nil {
-			return nil, err
+		res, err = getValue2(elem, nod.Next) // deep
+		if err != nil || nod.Type&cDeep == 0 {
+			return res, err
 		}
 	}
 	// $[1,...] or $..[1,...]
@@ -800,11 +838,8 @@ func arraySlice(input []byte, nod *tNode) ([]byte, error) {
 func arrayIterateElems(input []byte, nod *tNode) (elems []tElem, elem []byte, err error) {
 	var i, s, e int
 	l := len(input)
-	// skip spaces before value
-	i, err = skipSpaces(input, 1) // skip '['
-	if err != nil {
-		return
-	}
+	i = 1 // skip '['
+BFOR:
 	for pos := 0; i < l && input[i] != ']'; pos++ {
 		s, e, i, err = valuate(input, i)
 		if err != nil {
@@ -816,17 +851,23 @@ func arrayIterateElems(input []byte, nod *tNode) (elems []tElem, elem []byte, er
 				found = true
 			}
 		}
-		if nod.Type&cFullScan == 0 && nod.Step == 1 { // 5)
-			found = pos >= nod.Left
-			if pos >= nod.Right {
-				break
-			}
-		} else if nod.Left == pos { // 1)
-			elem = input[s:e]
-			if nod.Type&cDeep == 0 {
-				break // found single
+		if nod.Step == 1 {
+			switch nod.Type & (cDot | cSlice | cFullScan | cWild) {
+			case cSlice: // 5)
+				found = pos >= nod.Left
+				if pos >= nod.Right {
+					break BFOR
+				}
+			case cDot:
+				if nod.Left == pos { // 1)
+					elem = input[s:e]
+					if nod.Type&cDeep == 0 {
+						break BFOR // found single
+					}
+				}
 			}
 		}
+
 		if found {
 			elems = append(elems, tElem{s, e})
 			if len(elems) == len(nod.Elems) {
@@ -903,15 +944,19 @@ func sliceRecurse(input []byte, nod *tNode, elems []tElem) ([]byte, error) {
 }
 
 func subSlice(input []byte, nod *tNode, elems []tElem, i int, res []byte) ([]byte, error) {
-	sub, err := getValue2(input[elems[i].start:elems[i].end], nod.Next)
-	if err != nil {
-		return nil, err
-	}
-	if len(sub) > 0 {
-		res = plus(res, sub)
-	}
+	var sub []byte
+	var err error
 	if nod.Type&cDeep > 0 {
+		nod.Type |= cSubAgg
 		sub, err = getValue2(input[elems[i].start:elems[i].end], nod) // deep
+		if len(sub) > 0 {
+			res = plus(res, sub)
+		}
+	} else {
+		sub, err = getValue2(input[elems[i].start:elems[i].end], nod.Next)
+		if err != nil {
+			return nil, err
+		}
 		if len(sub) > 0 {
 			res = plus(res, sub)
 		}
@@ -958,7 +1003,7 @@ func processKey(nod *tNode, nodkey []byte, key []byte, val []byte, elems [][]byt
 	var err error
 	var deep []byte
 	var sub []byte
-	match := bytes.EqualFold(nodkey, key)
+	match := matchKeys(key, nodkey)
 	if nod.Type&(cWild|cDeep) > 0 || match {
 		// key match
 		if nod.Type&cDeep == 0 { // $.a  $.a.x  $[a,b]  $.*
@@ -986,9 +1031,62 @@ func processKey(nod *tNode, nodkey []byte, key []byte, val []byte, elems [][]byt
 	return elems, res, err
 }
 
+func matchKeys(key []byte, nodkey []byte) bool {
+	a, b := 0, 0
+	la, lb := len(key), len(nodkey)
+	for a < la && b < lb {
+		ch := key[a]
+		if ch == '\\' {
+			a++
+			if a == la {
+				break
+			}
+			switch key[a] {
+			case '"', '\\', '/':
+				ch = key[a]
+			case 'b':
+				ch = '\b'
+			case 'f':
+				ch = '\f'
+			case 'n':
+				ch = '\n'
+			case 'r':
+				ch = '\r'
+			case 't':
+				ch = '\t'
+			case 'u':
+				if a > la-5 || b > b-2 {
+					break
+				}
+				bb := make([]byte, 2)
+				_, err := hex.Decode(bb, key[a+1:a+5])
+				if err != nil {
+					return false
+				}
+				if bb[0] != nodkey[b] {
+					return false
+				}
+				b++
+				ch = bb[1]
+			}
+		}
+		if ch != nodkey[b] {
+			return false
+		}
+		a++
+		b++
+	}
+	return a == la && b == lb
+}
+
 func valuate(input []byte, i int) (int, int, int, error) {
-	s := i
-	e, err := skipValue(input, i) // s:e holds a value
+	var err error
+	var s int
+	s, err = skipSpaces(input, i)
+	if err != nil {
+		return 0, 0, i, err
+	}
+	e, err := skipValue(input, s) // s:e holds a value
 	if err != nil {
 		return s, e, i, err
 	}
@@ -1195,6 +1293,19 @@ func getFilteredElements(input []byte, nod *tNode) ([]byte, error) {
 	return append(result, ']'), nil
 }
 
+// always moving from start to end
+// step sets the direction
+// start bound always included
+// non-empty end bound always excluded
+//
+// empty bound rules
+//   positive step:
+//     empty start = 0
+//     empty end = last item (included)
+//   negative step:
+//     empty start = last item
+//     empty end = first item (included)
+//
 func adjustBounds(start int, stop int, step int, n int) (int, int, int, error) {
 	if step == 0 || step == cEmpty {
 		step = 1

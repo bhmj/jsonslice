@@ -111,19 +111,26 @@ func TestFuzzyPath(t *testing.T) {
 	}()
 	rand.Seed(time.Now().UnixNano())
 	b := make([]byte, 100)
-	top := 1000000
+	top := 20000000
 	fmt.Printf("\rpath fuzzy [                    ]\rpath fuzzy [")
 	for i := 0; i < top; i++ {
 		if i%(top/20) == 1 {
 			fmt.Printf(".")
 		}
 		randomBytes(b, 32, 127)
-		n := rand.Intn(len(b))
+		n := rand.Intn(len(b)) + 1
 		b[0] = '$'
 		str = string(b[:n])
 		readRef([]byte(str), 1, 0)
 	}
 	fmt.Println()
+}
+
+func TestCustomPath(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+	readRef([]byte("$.()"), 1, 0)
 }
 
 func TestFuzzyGet(t *testing.T) {
@@ -269,17 +276,12 @@ func Test_Expressions(t *testing.T) {
 
 		// all elements of an empty array is an empty array
 		{`$.store.manager[:]`, []byte(`[]`)},
-		// multiple keys (ordered as in query)
-		{`$.store.book[:]['price','title']`, []byte(`[[8.95,"Sayings of the Century"],[12.99,"Sword of Honour"],[8.99,"Moby Dick"],[22.99,"The Lord of the Rings"]]`)},
-		/*
-
-			// multiple keys combined with filter
-			{`$.store.book[?(@.price > $.expensive*1.1)]['price','title']`, []byte(`[[12.99,"Sword of Honour"],[22.99,"The Lord of the Rings"]]`)},
-
-			// functions in filter
-			{`$.store.bicycle.equipment[?(@.count() == 2)][1]`, []byte(`["apparel"]`)},
-		*/
-		// gold standard
+		// multiple keys (output ordered as in data)
+		{`$.store.book[:]['price','title']`, []byte(`["Sayings of the Century",8.95,"Sword of Honour",12.99,"Moby Dick",8.99,"The Lord of the Rings",22.99]`)},
+		// multiple keys combined with filter
+		{`$.store.book[?(@.price > $.expensive*1.1)]['price','title']`, []byte(`["Sword of Honour",12.99,"The Lord of the Rings",22.99]`)},
+		// functions in filter
+		{`$.store.bicycle.equipment[?(@.count() == 2)][1]`, []byte(`["apparel"]`)},
 	}
 
 	for _, tst := range tests {
@@ -294,26 +296,138 @@ func Test_Expressions(t *testing.T) {
 }
 
 func Test_Extensions(t *testing.T) {
-
-	variant1 := []byte(`
-		{
-			"book": [
-				{"Author": "J.R.R.Tolkien", "Title": "Lord of the Rings"},
-				{"Author": "Z.Hopp", "Title": "Trollkrittet"}
-			]
-		}
-	`)
-
+	/*
+		variant1 := []byte(`
+					{
+						"book": [
+							{"Author": "J.R.R.Tolkien", "Title": "Lord of the Rings"},
+							{"Author": "Z.Hopp", "Title": "Trollkrittet"}
+						]
+					}
+				`)
+		variant2 := []byte(`{ "book": [ {"Book one"}, {"Book two"}, {"Book three"}, {"Book four"} ] }`)
+		variant3 := []byte(`{"a": "first", "2": "second", "b": "third"}`)
+		variant4 := []byte(`["first", "second", "third"]`)
+		variant5 := []byte(`["first", "second", "third", "fourth", "fifth"]`)
+		variant6 := []byte(`{"key":"value"}`)
+		variant7 := []byte(`{"key":"value", "another":"entry"}`)
+		variant8 := []byte(`{"0":"value"}`)
+		variant9 := []byte(`{"single'quote":"value"}`)
+		variantA := []byte(`{"special:\"chars":"value"}`)
+		variantB := []byte(`{"*":"value"}`)
+	*/
+	//variantC := []byte(`["first",{"key":["first nested",{"more":[{"nested":["deepest","second"]},["more","values"]]}]}]`)
+	variantD := []byte(`
+					{
+						"object": {
+							"key": "value",
+							"array": [
+								{"key": "something"},
+								{"key": {"key": "russian dolls"}}
+							]
+						},
+						"key": "top"
+					}
+		`)
+	/*
+		variantE := []byte(`
+					{
+						"key": "value",
+						"another key": {
+							"complex": "string",
+							"primitives": [0, 1]
+						}
+					}
+		`)
+		variantF := []byte(`[40, null, 42 ]`)
+		variantG := []byte(`42`)
+	*/
 	tests := []struct {
 		Query    string
 		Base     []byte
 		Expected []byte
 	}{
-		// custom extensions
+		/* custom extensions
 		{`$.'book'[1]`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
 		{`$.'book'.1`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
-		// wildcard ignored if not alone
-		{`$.book[1,*]`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
+		// wildcard ignored if not alone (but still aggregates!)
+		{`$.book[1,*]`, variant1, []byte(`[{"Author": "Z.Hopp", "Title": "Trollkrittet"}]`)},
+
+		// gold standard
+
+		// array index dot notation
+		{`$.book.2`, variant2, []byte(`{"Book three"}`)},
+		// array index dot notation on object
+		{`$.2`, variant3, []byte(`"second"`)},
+		// array index slice end out of bounds
+		{`$[1:10]`, variant4, []byte(`["second","third"]`)},
+		// array index slice negative step
+		{`$[::-2]`, variant5, []byte(`["fifth","third","first"]`)},
+		// Array index slice start end negative step
+		{`$[3:0:-2]`, variant5, []byte(`["fourth","second"]`)},
+		// Array index slice start end step
+		{`$[0:3:2]`, variant5, []byte(`["first","third"]`)},
+		// Array index slice start end step 0
+		{`$[0:3:0]`, variant5, []byte(`["first","second","third"]`)},
+		// Array index slice start end step 1
+		{`$[0:3:1]`, variant5, []byte(`["first","second","third"]`)},
+		// Array index slice start end step non aligned
+		{`$[0:4:2]`, variant5, []byte(`["first","third"]`)},
+		// Array index slice start equals end
+		{`$[0:0]`, variant5, []byte(`[]`)},
+		// Array index slice step
+		{`$[::2]`, variant5, []byte(`["first","third","fifth"]`)},
+
+		// Key bracket notation
+		{`$['key']`, variant6, []byte(`"value"`)},
+		// Key bracket notation union
+		{`$['key','another']`, variant7, []byte(`["value","entry"]`)},
+		// Key bracket notation with double quotes
+		{`$["key"]`, variant6, []byte(`"value"`)},
+		// Key bracket notation with number
+		{`$['0']`, variant8, []byte(`"value"`)},
+		// Key bracket notation with number without quotes
+		{`$[0]`, variant8, []byte(`"value"`)},
+		// Key bracket notation with single quote
+
+		// {`$['single'quote']`, variant9, []byte(``)}, -- this one MUST generate error
+		// Key bracket notation with single quote escaped
+		{`$['single\'quote']`, variant9, []byte(`"value"`)},
+		// Key bracket notation with special characters
+		{`$['special:"chars']`, variantA, []byte(`"value"`)},
+		// Key bracket notation with star literal
+		{`$['*']`, variantB, []byte(`"value"`)},
+		// Key bracket notation without quotes
+		{`$[key]`, variant6, []byte(`"value"`)},
+		// Key dot bracket notation
+		{`$.['key']`, variant6, []byte(`"value"`)},
+		// Key dot bracket notation with double quotes
+		{`$.["key"]`, variant6, []byte(`"value"`)},
+		// Key dot bracket notation without quotes
+		{`$.[key]`, variant6, []byte(`"value"`)},
+
+		// Key dot notation with double quotes
+		{`$."key"`, variant6, []byte(`"value"`)},
+		// Key dot notation with single quotes
+		{`$.'key'`, variant6, []byte(`"value"`)},
+		// Recursive array index
+		*/
+		//{`$..[0]`, variantC, []byte(`["first","first nested",{"nested":["deepest","second"]},"deepest","more"]`)},
+		// Recursive key
+		{`$..key`, variantD, []byte(`"value"`)},
+		/* Recursive key with double quotes
+		{`$.."key"`, variantD, []byte(`"value"`)},
+		// Recursive key with single quotes
+		{`$..'key'`, variantD, []byte(`"value"`)},
+		// Recursive on nested object
+		{`$.store..price`, data, []byte(`"value"`)},
+		// Recursive wildcard
+		{`$..*`, variantE, []byte(`"value"`)},
+		// Recursive wildcard on null value array
+		{`$..*`, variantF, []byte(`"value"`)},
+		// Recursive wildcard on scalar
+		{`$..*`, variantG, []byte(`"value"`)},
+		*/
 	}
 
 	for _, tst := range tests {
