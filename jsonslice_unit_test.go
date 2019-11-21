@@ -122,6 +122,7 @@ func Test_sliceRecurse(t *testing.T) {
 	}
 
 	for _, tst := range tests {
+		tst.nod.Type |= cFullScan
 		res, err := sliceRecurse(input, tst.nod, elems)
 		if err != nil || tst.expected != string(res) {
 			t.Errorf(

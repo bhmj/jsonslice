@@ -332,7 +332,7 @@ func evalToken(input []byte, toks []*tToken) (*tOperand, []*tToken, error) {
 	tok := toks[0]
 	if tok.Operand != nil {
 		if tok.Operand.Node != nil {
-			val, err := getValue2(input, tok.Operand.Node)
+			val, err := getValue2(input, tok.Operand.Node, false)
 			if len(val) == 0 || err != nil {
 				// not found or other error
 				tok.Operand.Type = cOpNull

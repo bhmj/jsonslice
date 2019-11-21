@@ -39,7 +39,7 @@ func GetArrayElements(input []byte, path string, alloc int) ([][]byte, error) {
 		if n.Filter != nil {
 			for _, tok := range n.Filter.toks {
 				if tok.Operand != nil && tok.Operand.Node != nil && tok.Operand.Type&cRoot > 0 {
-					val, err := getValue2(input, tok.Operand.Node)
+					val, err := getValue2(input, tok.Operand.Node, false)
 					if err != nil {
 						// not found or other error
 						tok.Operand.Type = cOpNull
@@ -51,10 +51,10 @@ func GetArrayElements(input []byte, path string, alloc int) ([][]byte, error) {
 		}
 	}
 
-	return getValueAE(input, node, alloc)
+	return getValueAE(input, node, alloc, false)
 }
 
-func getValueAE(input []byte, nod *tNode, alloc int) (result [][]byte, err error) {
+func getValueAE(input []byte, nod *tNode, alloc int, inside bool) (result [][]byte, err error) {
 
 	i, _ := skipSpaces(input, 0)
 
@@ -68,7 +68,7 @@ func getValueAE(input []byte, nod *tNode, alloc int) (result [][]byte, err error
 	}
 	if len(nod.Keys) > 0 {
 		// find the key and seek to the value
-		if input, err = getKeyValue(input, nod); err != nil {
+		if input, err = getKeyValue(input, nod, inside); err != nil {
 			return nil, err
 		}
 	}

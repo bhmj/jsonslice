@@ -296,8 +296,7 @@ func Test_Expressions(t *testing.T) {
 }
 
 func Test_Extensions(t *testing.T) {
-	/*
-		variant1 := []byte(`
+	variant1 := []byte(`
 					{
 						"book": [
 							{"Author": "J.R.R.Tolkien", "Title": "Lord of the Rings"},
@@ -305,18 +304,17 @@ func Test_Extensions(t *testing.T) {
 						]
 					}
 				`)
-		variant2 := []byte(`{ "book": [ {"Book one"}, {"Book two"}, {"Book three"}, {"Book four"} ] }`)
-		variant3 := []byte(`{"a": "first", "2": "second", "b": "third"}`)
-		variant4 := []byte(`["first", "second", "third"]`)
-		variant5 := []byte(`["first", "second", "third", "fourth", "fifth"]`)
-		variant6 := []byte(`{"key":"value"}`)
-		variant7 := []byte(`{"key":"value", "another":"entry"}`)
-		variant8 := []byte(`{"0":"value"}`)
-		variant9 := []byte(`{"single'quote":"value"}`)
-		variantA := []byte(`{"special:\"chars":"value"}`)
-		variantB := []byte(`{"*":"value"}`)
-	*/
-	//variantC := []byte(`["first",{"key":["first nested",{"more":[{"nested":["deepest","second"]},["more","values"]]}]}]`)
+	variant2 := []byte(`{ "book": [ {"Book one"}, {"Book two"}, {"Book three"}, {"Book four"} ] }`)
+	variant3 := []byte(`{"a": "first", "2": "second", "b": "third"}`)
+	variant4 := []byte(`["first", "second", "third"]`)
+	variant5 := []byte(`["first", "second", "third", "fourth", "fifth"]`)
+	variant6 := []byte(`{"key":"value"}`)
+	variant7 := []byte(`{"key":"value", "another":"entry"}`)
+	variant8 := []byte(`{"0":"value"}`)
+	variant9 := []byte(`{"single'quote":"value"}`)
+	variantA := []byte(`{"special:\"chars":"value"}`)
+	variantB := []byte(`{"*":"value"}`)
+	variantC := []byte(`["first",{"key":["first nested",{"more":[{"nested":["deepest","second"]},["more","values"]]}]}]`)
 	variantD := []byte(`
 					{
 						"object": {
@@ -329,8 +327,7 @@ func Test_Extensions(t *testing.T) {
 						"key": "top"
 					}
 		`)
-	/*
-		variantE := []byte(`
+	variantE := []byte(`
 					{
 						"key": "value",
 						"another key": {
@@ -339,15 +336,15 @@ func Test_Extensions(t *testing.T) {
 						}
 					}
 		`)
-		variantF := []byte(`[40, null, 42 ]`)
-		variantG := []byte(`42`)
-	*/
+	variantF := []byte(`[40, null, 42]`)
+	variantG := []byte(`42`)
+
 	tests := []struct {
 		Query    string
 		Base     []byte
 		Expected []byte
 	}{
-		/* custom extensions
+		// custom extensions
 		{`$.'book'[1]`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
 		{`$.'book'.1`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
 		// wildcard ignored if not alone (but still aggregates!)
@@ -411,23 +408,21 @@ func Test_Extensions(t *testing.T) {
 		// Key dot notation with single quotes
 		{`$.'key'`, variant6, []byte(`"value"`)},
 		// Recursive array index
-		*/
-		//{`$..[0]`, variantC, []byte(`["first","first nested",{"nested":["deepest","second"]},"deepest","more"]`)},
+		{`$..[0]`, variantC, []byte(`["first","first nested",{"nested":["deepest","second"]},"deepest","more"]`)},
 		// Recursive key
-		{`$..key`, variantD, []byte(`"value"`)},
-		/* Recursive key with double quotes
-		{`$.."key"`, variantD, []byte(`"value"`)},
+		{`$..key`, variantD, []byte(`["value","something",{"key": "russian dolls"},"russian dolls","top"]`)},
+		// Recursive key with double quotes
+		{`$.."key"`, variantD, []byte(`["value","something",{"key": "russian dolls"},"russian dolls","top"]`)},
 		// Recursive key with single quotes
-		{`$..'key'`, variantD, []byte(`"value"`)},
+		{`$..'key'`, variantD, []byte(`["value","something",{"key": "russian dolls"},"russian dolls","top"]`)},
 		// Recursive on nested object
-		{`$.store..price`, data, []byte(`"value"`)},
+		{`$.store..price`, data, []byte(`[8.95,12.99,8.99,22.99,19.95]`)},
 		// Recursive wildcard
 		{`$..*`, variantE, []byte(`"value"`)},
 		// Recursive wildcard on null value array
 		{`$..*`, variantF, []byte(`"value"`)},
 		// Recursive wildcard on scalar
 		{`$..*`, variantG, []byte(`"value"`)},
-		*/
 	}
 
 	for _, tst := range tests {
