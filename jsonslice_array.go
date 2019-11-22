@@ -1,5 +1,10 @@
 package jsonslice
 
+import (
+	"errors"
+	"strconv"
+)
+
 /**
   JsonSlice 0.7.4
   Michael Gurov, 2018-2019
@@ -25,9 +30,10 @@ func GetArrayElements(input []byte, path string, alloc int) ([][]byte, error) {
 		return nil, errPathRootExpected
 	}
 
-	node, _, err := readRef([]byte(path), 1, 0)
+	node, i, err := readRef([]byte(path), 1, 0)
 	if err != nil {
-		return nil, err
+		repool(node)
+		return nil, errors.New(err.Error() + " at " + strconv.Itoa(i))
 	}
 
 	n := node
@@ -51,7 +57,9 @@ func GetArrayElements(input []byte, path string, alloc int) ([][]byte, error) {
 		}
 	}
 
-	return getValueAE(input, node, alloc, false)
+	result, err := getValueAE(input, node, alloc, false)
+	repool(node)
+	return result, err
 }
 
 func getValueAE(input []byte, nod *tNode, alloc int, inside bool) (result [][]byte, err error) {

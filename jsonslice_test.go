@@ -1,6 +1,7 @@
 package jsonslice
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -271,6 +272,7 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.book[0].*`, []byte(`["reference","Nigel Rees","Sayings of the Century",8.95]`)},
 		// wildcard: named key on a given level
 		{`$.store.*.price`, []byte(`[19.95]`)},
+
 		// wildcard: named key in any array on a given level
 		{`$.store.*[:].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
 
@@ -285,7 +287,6 @@ func Test_Expressions(t *testing.T) {
 	}
 
 	for _, tst := range tests {
-		println(tst.Query)
 		res, err := Get(data, tst.Query)
 		if err != nil {
 			t.Errorf(tst.Query + " : " + err.Error())
@@ -327,15 +328,7 @@ func Test_Extensions(t *testing.T) {
 						"key": "top"
 					}
 		`)
-	variantE := []byte(`
-					{
-						"key": "value",
-						"another key": {
-							"complex": "string",
-							"primitives": [0, 1]
-						}
-					}
-		`)
+	variantE := []byte(`{"key":"value","another key": {"complex":"string","primitives":[0,1]}}`)
 	variantF := []byte(`[40, null, 42]`)
 	variantG := []byte(`42`)
 
@@ -417,12 +410,13 @@ func Test_Extensions(t *testing.T) {
 		{`$..'key'`, variantD, []byte(`["value","something",{"key": "russian dolls"},"russian dolls","top"]`)},
 		// Recursive on nested object
 		{`$.store..price`, data, []byte(`[8.95,12.99,8.99,22.99,19.95]`)},
+
 		// Recursive wildcard
-		{`$..*`, variantE, []byte(`"value"`)},
+		{`$..*`, variantE, []byte(`["value",{"complex":"string","primitives":[0,1]},"string",[0,1],0,1]`)},
 		// Recursive wildcard on null value array
-		{`$..*`, variantF, []byte(`"value"`)},
+		{`$..*`, variantF, []byte(`[40,null,42]`)},
 		// Recursive wildcard on scalar
-		{`$..*`, variantG, []byte(`"value"`)},
+		{`$..*`, variantG, []byte(`[]`)},
 	}
 
 	for _, tst := range tests {
@@ -464,76 +458,79 @@ func Test_Errors(t *testing.T) {
 		Data     []byte
 		Query    string
 		Expected string
+		Result   []byte
 	}{
-		// normally only . and [ expected after the key
-		{data, `$.store(foo`, `path: invalid element reference at 7`},
+		/* normally only . and [ expected after the key
+		{data, `$.store(foo`, `path: invalid character at 7`, []byte{}},
 		// unexpected EOF before :
-		{[]byte(`{"foo"  `), `$.foo`, `unexpected end of input`},
+		{[]byte(`{"foo"  `), `$.foo`, `unexpected end of input`, []byte{}},
 		// unexpected EOF after :
-		{[]byte(`{"foo" : `), `$.foo`, `unexpected end of input`},
+		{[]byte(`{"foo" : `), `$.foo`, `unexpected end of input`, []byte{}},
 		// wrong type
-		{[]byte(`{"foo" : "bar"`), `$.foo[0]`, `array expected`},
+		{[]byte(`{"foo" : "bar"`), `$.foo[0]`, `unexpected end of input`, []byte{}},
 		// wrong type
-		{[]byte(`{"foo" : "bar"`), `$.foo[0].bar`, `array expected`},
+		{[]byte(`{"foo" : "bar"`), `$.foo[0].bar`, `unexpected end of input`, []byte{}},
 		// wrong type
-		{[]byte(`{"foo" : "bar"`), `$.foo.bar`, `object expected`},
+		{[]byte(`{"foo" : "bar"`), `$.foo.bar`, `unexpected end of input`, []byte{}},
 		// wrong type
-		{[]byte(`["foo" : ("bar")]`), `$.foo.bar`, `object expected`},
+		{[]byte(`["foo" : ("bar")]`), `$.foo.bar`, `unrecognized value: true, false or null expected`, []byte{}},
 
 		// start with $
-		{data, `foo`, `path: $ expected`},
+		{data, `foo`, `path: $ expected`, []byte{}},
 		// empty
-		{data, ``, `path: empty`},
+		{data, ``, `path: empty`, []byte{}},
 		// unexpected end
-		{data, `$.`, `path: unexpected end of path at 2`},
+		{data, `$.`, `path: unexpected end of path at 2`, []byte{}},
 		// bad function
-		{data, `$.foo()`, `path: unknown function at 5`},
+		{data, `$.foo()`, `path: unknown function at 5`, []byte{}},
 
 		// array: index bound missing
-		{data, `$.store.book[1`, `path: index bound missing at 14`},
+		{data, `$.store.book[1`, `path: unexpected end of path at 14`, []byte{}},
 		// array: path: 0 as a second bound does not make sense
-		{data, `$.store.book[1:0`, `path: 0 as a second bound does not make sense at 15`},
+		{data, `$.store.book[1:0`, `path: unexpected end of path at 16`, []byte{}},
 		// array: index bound missing (2nd)
-		{data, `$.store.book[1:3`, `path: index bound missing at 16`},
-		// array: node does not exist
-		{data, `$.store.book[99]`, `specified array element not found`},
-		// array: node does not exist
-		{data, `$.store.book[-99]`, `specified array element not found`},
-		// array: node does not exist
-		{data, `$.store.book[-99:-15]`, `specified array element not found`},
-
+		{data, `$.store.book[1:3`, `path: unexpected end of path at 16`, []byte{}},
+		// array: index out of bounds: not an error
+		{data, `$.store.book[99]`, ``, []byte(``)},
+		// array: index out of bounds: not an error
+		{data, `$.store.book[-99]`, ``, []byte(``)},
+		// array: slice indexes out of bounds: not an error
+		{data, `$.store.book[-99:-15]`, ``, []byte(`[]`)},
+		*/
 		// filter expression: empty
-		{data, `$.store.book[?()]`, `empty filter`},
+		{data, `$.store.book[?()]`, `empty filter`, []byte{}},
 		// filter expression: invalid
-		{data, `$.store.book[?(1+)]`, `not enough arguments`},
+		{data, `$.store.book[?(1+)]`, `not enough arguments`, []byte{}},
 
 		// wrong bool value
-		{[]byte(`{"foo": Troo}`), `$.foo`, `unrecognized value: true, false or null expected`},
+		{[]byte(`{"foo": Troo}`), `$.foo`, `unrecognized value: true, false or null expected`, []byte{}},
 		// wrong value
-		{[]byte(`{"foo": moo}`), `$.foo`, `unrecognized value: true, false or null expected`},
+		{[]byte(`{"foo": moo}`), `$.foo`, `unrecognized value: true, false or null expected`, []byte{}},
 		// unexpected EOF
-		{[]byte(`{"foo": { "bar": "bazz"`), `$.bar`, `unexpected end of input`},
+		{[]byte(`{"foo": { "bar": "bazz"`), `$.bar`, `unexpected end of input`, []byte{}},
 		// unexpected EOF
-		{[]byte(`{"foo": { "bar": 0`), `$.foo.bar`, `unexpected end of input`},
+		{[]byte(`{"foo": { "bar": 0`), `$.foo.bar`, `unexpected end of input`, []byte{}},
 		// unexpected EOF
-		{[]byte(`{"foo": {"bar":"moo`), `$.foo.moo`, `unexpected end of input`},
+		{[]byte(`{"foo": {"bar":"moo`), `$.foo.moo`, `unexpected end of input`, []byte{}},
 
 		// invalid json
-		{[]byte(`{"foo" - { "bar": 0 }}`), `$.foo.bar`, `':' expected`},
+		{[]byte(`{"foo" - { "bar": 0 }}`), `$.foo.bar`, `':' expected`, []byte{}},
 
 		// invalid string operator
-		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar > "zzz")]`, `operator is not applicable to strings`},
+		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar > "zzz")]`, `operator is not applicable to strings`, []byte{}},
 		// unknown token
-		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar == 2^3)]`, `unknown token at 18`},
+		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar == 2^3)]`, `unknown token at 16`, []byte{}},
 
 		// empty key
-		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.['']`, `empty key`},
+		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.['']`, `empty key`, []byte{}},
 	}
 
 	for _, tst := range tests {
-		_, err := Get(tst.Data, tst.Query)
+		res, err := Get(tst.Data, tst.Query)
 		if err == nil {
-			t.Errorf(tst.Query + " : error expected")
+			if !bytes.EqualFold(res, tst.Result) {
+				t.Errorf(tst.Query + " : `" + string(tst.Result) + "` expected, `" + string(res) + "` received")
+			}
 		} else if err.Error() != tst.Expected {
 			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(err.Error()) + "`")
 		}

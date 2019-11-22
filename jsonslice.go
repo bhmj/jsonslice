@@ -55,7 +55,16 @@ var (
 	errInvalidOperatorStrings error
 )
 
+var speChars [128]byte
+
 func init() {
+
+	speChars['b'] = '\b'
+	speChars['f'] = '\f'
+	speChars['n'] = '\n'
+	speChars['r'] = '\r'
+	speChars['t'] = '\t'
+
 	nodePool = sync.Pool{
 		New: func() interface{} {
 			return &tNode{
@@ -174,7 +183,6 @@ func Get(input []byte, path string) ([]byte, error) {
 	}
 
 	result, err := getValue2(input, node, false)
-
 	repool(node)
 	return result, err
 }
@@ -240,7 +248,7 @@ func readRef(path []byte, i int, uptype int) (*tNode, int, error) {
 		i++
 	}
 	if i == l {
-		return nil, i, errUnexpectedEnd
+		return nil, i, errPathUnexpectedEnd
 	}
 	// bracket notated
 	if path[i] == '[' {
@@ -553,7 +561,7 @@ func getValueSlice(input []byte, nod *tNode) (result []byte, err error) {
 	case '[':
 		return arraySlice(input, nod) // 1+ (recurse inside) (+deep)
 	default:
-		return nil, errObjectOrArrayExpected
+		return nil, nil
 	}
 }
 
@@ -789,7 +797,7 @@ func arrayElemByIndex(input []byte, nod *tNode, inside bool) ([]byte, error) {
 		}
 	}
 	// $[1,...] or $..[1,...]
-	return collectRecurse(input, nod, elems, res, inside)
+	return collectRecurse(input, nod, elems, res, inside) // process elems + deepscan inside
 }
 
 // get array slice
@@ -877,9 +885,12 @@ BFOR:
 func collectRecurse(input []byte, nod *tNode, elems []tElem, res []byte, inside bool) ([]byte, error) {
 	var err error
 
-	if nod.Type&cFullScan == 0 {
+	if nod.Type&cFullScan == 0 || nod.Type&cWild > 0 {
 		// special case 2): elems already listed
 		for i := 0; i < len(elems); i++ {
+			if nod.Type&cWild > 0 {
+				res = plus(res, input[elems[i].start:elems[i].end]) // wild
+			}
 			res, err = subSlice(input, nod, elems, i, res, inside) // recurse + deep
 			if err != nil {
 				return res, err
@@ -920,7 +931,10 @@ func sliceRecurse(input []byte, nod *tNode, elems []tElem) ([]byte, error) {
 	}
 	if nod.Type&(cFullScan|cDeep|cWild) > 0 {
 		for ; (a > b && step < 0) || (a < b && step > 0); a += step {
-			res, err = subSlice(input, nod, elems, a, res, true)
+			if nod.Type&(cWild|cIsTerminal) == cWild|cIsTerminal {
+				res = plus(res, input[elems[a].start:elems[a].end]) // wild
+			}
+			res, err = subSlice(input, nod, elems, a, res, true) // slice is aggregated => true
 			if err != nil {
 				return nil, err
 			}
@@ -928,7 +942,7 @@ func sliceRecurse(input []byte, nod *tNode, elems []tElem) ([]byte, error) {
 	} else {
 		// 5.2) special case: elems already filtered
 		for i := 0; i < len(elems); i++ {
-			res, err = subSlice(input, nod, elems, i, res, true)
+			res, err = subSlice(input, nod, elems, i, res, true) // slice is aggregated => true
 			if err != nil {
 				return nil, err
 			}
@@ -941,7 +955,7 @@ func subSlice(input []byte, nod *tNode, elems []tElem, i int, res []byte, inside
 	var sub []byte
 	var err error
 	if nod.Type&cDeep > 0 {
-		sub, err = getValue2(input[elems[i].start:elems[i].end], nod, inside) // deepscan
+		sub, err = getValue2(input[elems[i].start:elems[i].end], nod, true) // deepscan
 		if len(sub) > 0 {
 			res = plus(res, sub)
 		}
@@ -989,15 +1003,15 @@ func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, res [
 		}
 	}
 
-	return elems, res, i, nil
+	return elems, res, i, err
 }
 
 func processKey(nod *tNode, nodkey []byte, key []byte, val []byte, elems [][]byte, res []byte, inside bool) ([][]byte, []byte, error) {
 	var err error
 	var deep []byte
 	var sub []byte
-	match := matchKeys(key, nodkey)
-	if nod.Type&(cWild|cDeep) > 0 || match {
+	match := matchKeys(key, nodkey) || nod.Type&cWild > 0
+	if nod.Type&cDeep > 0 || match {
 		// key match
 		if nod.Type&cDeep == 0 { // $.a  $.a.x  $[a,b]  $.*
 			if len(nod.Keys) == 1 {
@@ -1036,16 +1050,8 @@ func matchKeys(key []byte, nodkey []byte) bool {
 			switch key[a] {
 			case '"', '\\', '/':
 				ch = key[a]
-			case 'b':
-				ch = '\b'
-			case 'f':
-				ch = '\f'
-			case 'n':
-				ch = '\n'
-			case 'r':
-				ch = '\r'
-			case 't':
-				ch = '\t'
+			case 'b', 'f', 'n', 'r', 't':
+				ch = speChars[key[a]]
 			case 'u':
 				if a > la-5 || b > b-2 {
 					break
