@@ -507,25 +507,29 @@ func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
 func getValue2(input []byte, nod *tNode, inside bool) (result []byte, err error) {
 
 	if nod == nil || len(input) == 0 {
+		if !inside {
+			return input, nil
+		}
 		return input[0:len(input):len(input)], nil
 	}
 
 	i, _ := skipSpaces(input, 0) // we're at the value
 	input = input[i:]
 
+	agg := nod.Type&(cAgg|cSlice|cDeep|cWild|cFilter) > 0
 	switch {
 	case nod.Type&(cDot|cDeep) > 0: // single or multiple key
-		result, err = getValueDot(input, nod, inside) // recurse inside
+		result, err = getValueDot(input, nod, agg || inside) // recurse inside
 	case nod.Type&cSlice > 0: // array slice [::]
 		result, err = getValueSlice(input, nod) // recurse inside
 	case nod.Type&cFunction > 0: // func()
 		result, err = doFunc(input, nod) // no recurse
 	case nod.Type&cFilter > 0: // [?(...)]
-		result, err = getValueFilter(input, nod, inside) // no recurse
+		result, err = getValueFilter(input, nod, agg || inside) // no recurse
 	default:
 		return nil, errFieldNotFound
 	}
-	if nod.Type&(cAgg|cSlice|cDeep|cWild|cFilter) > 0 && !inside {
+	if agg && !inside {
 		result = append(append([]byte{'['}, result...), byte(']'))
 	}
 	return result, err
@@ -791,7 +795,7 @@ func arrayElemByIndex(input []byte, nod *tNode, inside bool) ([]byte, error) {
 		}
 	}
 	if elem != nil { // $[3] or $[-3]
-		res, err = getValue2(elem, nod.Next, inside) // deepscn
+		res, err = getValue2(elem, nod.Next, inside) // next node
 		if err != nil || nod.Type&cDeep == 0 {
 			return res, err
 		}
@@ -888,9 +892,9 @@ func collectRecurse(input []byte, nod *tNode, elems []tElem, res []byte, inside 
 	if nod.Type&cFullScan == 0 || nod.Type&cWild > 0 {
 		// special case 2): elems already listed
 		for i := 0; i < len(elems); i++ {
-			if nod.Type&cWild > 0 {
-				res = plus(res, input[elems[i].start:elems[i].end]) // wild
-			}
+			//if nod.Type&cWild > 0 {
+			//	res = plus(res, input[elems[i].start:elems[i].end]) // wild
+			//}
 			res, err = subSlice(input, nod, elems, i, res, inside) // recurse + deep
 			if err != nil {
 				return res, err
@@ -954,16 +958,17 @@ func sliceRecurse(input []byte, nod *tNode, elems []tElem) ([]byte, error) {
 func subSlice(input []byte, nod *tNode, elems []tElem, i int, res []byte, inside bool) ([]byte, error) {
 	var sub []byte
 	var err error
-	if nod.Type&cDeep > 0 {
-		sub, err = getValue2(input[elems[i].start:elems[i].end], nod, true) // deepscan
-		if len(sub) > 0 {
-			res = plus(res, sub)
-		}
-	} else {
+	if nod.Type&(cWild|cDeep) != cDeep {
 		sub, err = getValue2(input[elems[i].start:elems[i].end], nod.Next, inside)
 		if err != nil {
 			return nil, err
 		}
+		if len(sub) > 0 {
+			res = plus(res, sub)
+		}
+	}
+	if nod.Type&cDeep > 0 {
+		sub, err = getValue2(input[elems[i].start:elems[i].end], nod, true) // deepscan
 		if len(sub) > 0 {
 			res = plus(res, sub)
 		}
