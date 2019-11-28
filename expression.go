@@ -193,10 +193,7 @@ func tokComplex(path []byte, i int) (int, *tToken, error) {
 		if err != nil {
 			return 0, nil, err
 		}
-		switch path[i] {
-		case '@':
-			nod.Type |= cCurrent
-		case '$':
+		if path[i] == '$' {
 			nod.Type |= cRoot
 		}
 		i += j

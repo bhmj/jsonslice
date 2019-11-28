@@ -66,59 +66,59 @@ func Test_sliceRecurse(t *testing.T) {
 		expected string
 	}{
 		// [:] == [::]
-		{&tNode{Left: cEmpty, Right: cEmpty, Step: cEmpty}, `"a","b","c","d","e"`},
+		{&tNode{Slice: [3]int{cEmpty, cEmpty, cEmpty}}, `"a","b","c","d","e"`},
 		// [2:]
-		{&tNode{Left: 2, Right: cEmpty, Step: cEmpty}, `"c","d","e"`},
+		{&tNode{Slice: [3]int{2, cEmpty, cEmpty}}, `"c","d","e"`},
 		// [:3]
-		{&tNode{Left: cEmpty, Right: 3, Step: cEmpty}, `"a","b","c"`},
+		{&tNode{Slice: [3]int{cEmpty, 3, cEmpty}}, `"a","b","c"`},
 		// [-2:]
-		{&tNode{Left: -2, Right: cEmpty, Step: cEmpty}, `"d","e"`},
+		{&tNode{Slice: [3]int{-2, cEmpty, cEmpty}}, `"d","e"`},
 		// [:-2]
-		{&tNode{Left: cEmpty, Right: -2, Step: cEmpty}, `"a","b","c"`},
+		{&tNode{Slice: [3]int{cEmpty, -2, cEmpty}}, `"a","b","c"`},
 		// [1:4]
-		{&tNode{Left: 1, Right: 4, Step: cEmpty}, `"b","c","d"`},
+		{&tNode{Slice: [3]int{1, 4, cEmpty}}, `"b","c","d"`},
 		// [-4:4]
-		{&tNode{Left: -4, Right: 4, Step: cEmpty}, `"b","c","d"`},
+		{&tNode{Slice: [3]int{-4, 4, cEmpty}}, `"b","c","d"`},
 		// [-8:4]
-		{&tNode{Left: -8, Right: 4, Step: cEmpty}, `"a","b","c","d"`},
+		{&tNode{Slice: [3]int{-8, 4, cEmpty}}, `"a","b","c","d"`},
 		// [-8:8]
-		{&tNode{Left: -8, Right: 8, Step: cEmpty}, `"a","b","c","d","e"`},
+		{&tNode{Slice: [3]int{-8, 8, cEmpty}}, `"a","b","c","d","e"`},
 		// [1:-2]
-		{&tNode{Left: 1, Right: -2, Step: cEmpty}, `"b","c"`},
+		{&tNode{Slice: [3]int{1, -2, cEmpty}}, `"b","c"`},
 		// [1:-3]
-		{&tNode{Left: 1, Right: -3, Step: cEmpty}, `"b"`},
+		{&tNode{Slice: [3]int{1, -3, cEmpty}}, `"b"`},
 		// [1:-4]
-		{&tNode{Left: 1, Right: -4, Step: cEmpty}, ``},
+		{&tNode{Slice: [3]int{1, -4, cEmpty}}, ``},
 		// [-5:-2] -> 0..2
-		{&tNode{Left: -5, Right: -2, Step: cEmpty}, `"a","b","c"`},
+		{&tNode{Slice: [3]int{-5, -2, cEmpty}}, `"a","b","c"`},
 
 		// slice + step
 		// [::1]
-		{&tNode{Left: cEmpty, Right: cEmpty, Step: 1}, `"a","b","c","d","e"`},
+		{&tNode{Slice: [3]int{cEmpty, cEmpty, 1}}, `"a","b","c","d","e"`},
 		// [1::2]
-		{&tNode{Left: 1, Right: cEmpty, Step: 2}, `"b","d"`},
+		{&tNode{Slice: [3]int{1, cEmpty, 2}}, `"b","d"`},
 
 		// slice + negative step
 		// [::-1]
-		{&tNode{Left: cEmpty, Right: cEmpty, Step: -1}, `"e","d","c","b","a"`},
+		{&tNode{Slice: [3]int{cEmpty, cEmpty, -1}}, `"e","d","c","b","a"`},
 		// [2::-1]
-		{&tNode{Left: 2, Right: cEmpty, Step: -1}, `"c","b","a"`},
+		{&tNode{Slice: [3]int{2, cEmpty, -1}}, `"c","b","a"`},
 		// [:3:-1]
-		{&tNode{Left: cEmpty, Right: 3, Step: -1}, `"e"`},
+		{&tNode{Slice: [3]int{cEmpty, 3, -1}}, `"e"`},
 		// [-2::-1]
-		{&tNode{Left: -2, Right: cEmpty, Step: -1}, `"d","c","b","a"`},
+		{&tNode{Slice: [3]int{-2, cEmpty, -1}}, `"d","c","b","a"`},
 		// [-2:1:-1]
-		{&tNode{Left: -2, Right: 1, Step: -1}, `"d","c"`},
+		{&tNode{Slice: [3]int{-2, 1, -1}}, `"d","c"`},
 		// [::-2]
-		{&tNode{Left: cEmpty, Right: cEmpty, Step: -2}, `"e","c","a"`},
+		{&tNode{Slice: [3]int{cEmpty, cEmpty, -2}}, `"e","c","a"`},
 		// [::-3]
-		{&tNode{Left: cEmpty, Right: cEmpty, Step: -3}, `"e","b"`},
+		{&tNode{Slice: [3]int{cEmpty, cEmpty, -3}}, `"e","b"`},
 		// [::-4]
-		{&tNode{Left: cEmpty, Right: cEmpty, Step: -4}, `"e","a"`},
+		{&tNode{Slice: [3]int{cEmpty, cEmpty, -4}}, `"e","a"`},
 		// [::-5]
-		{&tNode{Left: cEmpty, Right: cEmpty, Step: -5}, `"e"`},
+		{&tNode{Slice: [3]int{cEmpty, cEmpty, -5}}, `"e"`},
 		// [1:2:-1]
-		{&tNode{Left: 1, Right: 2, Step: -1}, ``},
+		{&tNode{Slice: [3]int{1, 2, -1}}, ``},
 	}
 
 	for _, tst := range tests {
@@ -127,7 +127,7 @@ func Test_sliceRecurse(t *testing.T) {
 		if err != nil || tst.expected != string(res) {
 			t.Errorf(
 				"sliceRecurse('%v', {%d, %d, %d}) == %v, expected %v",
-				string(input), tst.nod.Left, tst.nod.Right, tst.nod.Step, string(res), tst.expected,
+				string(input), tst.nod.Slice[0], tst.nod.Slice[1], tst.nod.Slice[2], string(res), tst.expected,
 			)
 		}
 	}
