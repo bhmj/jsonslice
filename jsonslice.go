@@ -24,24 +24,13 @@ var (
 	errPathInvalidChar,
 	errPathRootExpected,
 	errPathUnexpectedEnd,
-	errPathInvalidReference,
 	errPathUnknownFunction,
-	errPathIndexBoundMissing,
-	errPathKeyListTerminated,
-	errPathIndexNonsense,
-	errArrayElementNotFound,
 	errFieldNotFound,
-	errArrayExpected,
 	errColonExpected,
 	errUnrecognizedValue,
 	errUnexpectedEnd,
-	errObjectExpected,
 	errInvalidLengthUsage,
 	errObjectOrArrayExpected,
-	errWildcardsNotSupported,
-	errFunctionsNotSupported,
-	errTerminalNodeArray,
-	errSubslicingNotSupported,
 	errUnexpectedEOT,
 	errUnknownToken,
 	errUnexpectedStringEnd,
@@ -68,7 +57,7 @@ func init() {
 	nodePool = sync.Pool{
 		New: func() interface{} {
 			return &tNode{
-				Keys:  make([]word, 0),
+				Keys:  make([]word, 0, 1), // most common case: a single key
 				Elems: make([]int, 0),
 			}
 		},
@@ -78,24 +67,13 @@ func init() {
 	errPathInvalidChar = errors.New("path: invalid character")
 	errPathRootExpected = errors.New("path: $ expected")
 	errPathUnexpectedEnd = errors.New("path: unexpected end of path")
-	errPathInvalidReference = errors.New("path: invalid element reference")
 	errPathUnknownFunction = errors.New("path: unknown function")
-	errPathIndexBoundMissing = errors.New("path: index bound missing")
-	errPathKeyListTerminated = errors.New("path: key list terminated unexpectedly")
-	errPathIndexNonsense = errors.New("path: 0 as a second bound does not make sense")
-	errArrayElementNotFound = errors.New(`specified array element not found`)
 	errFieldNotFound = errors.New(`field not found`)
 	errColonExpected = errors.New("':' expected")
 	errUnrecognizedValue = errors.New("unrecognized value: true, false or null expected")
 	errUnexpectedEnd = errors.New("unexpected end of input")
-	errObjectExpected = errors.New("object expected")
-	errArrayExpected = errors.New("array expected")
 	errInvalidLengthUsage = errors.New("length() is only applicable to array or string")
 	errObjectOrArrayExpected = errors.New("object or array expected")
-	errWildcardsNotSupported = errors.New("wildcards are not supported in GetArrayElements")
-	errFunctionsNotSupported = errors.New("functions are not supported in GetArrayElements")
-	errTerminalNodeArray = errors.New("terminal node must be an array")
-	errSubslicingNotSupported = errors.New("sub-slicing is not supported in GetArrayElements")
 	errUnexpectedEOT = errors.New("unexpected end of token")
 	errUnknownToken = errors.New("unknown token")
 	errUnexpectedStringEnd = errors.New("unexpected end of string")
@@ -110,6 +88,22 @@ func init() {
 }
 
 type word []byte
+
+const (
+	cDot      = 1 << iota // common [dot-]node
+	cAgg      = 1 << iota // aggregating
+	cFunction = 1 << iota // function
+	cSlice    = 1 << iota // slice array [x:y:s]
+	cFullScan = 1 << iota // array slice: need fullscan
+	cFilter   = 1 << iota // filter
+	cWild     = 1 << iota // wildcard (*)
+	cDeep     = 1 << iota // deepscan
+
+	cRoot = 1 << iota // key is referred from root
+
+	cEmpty = 1 << 29 // empty number
+	cNAN   = 1 << 30 // not-a-number
+)
 
 type tNode struct {
 	//Key    word
@@ -183,22 +177,6 @@ func Get(input []byte, path string) ([]byte, error) {
 	repool(node)
 	return result, err
 }
-
-const (
-	cDot      = 1 << iota // common [dot-]node
-	cAgg      = 1 << iota // aggregating
-	cFunction = 1 << iota // function
-	cSlice    = 1 << iota // slice array [x:y:s]
-	cFullScan = 1 << iota // array slice: need fullscan
-	cFilter   = 1 << iota // filter
-	cWild     = 1 << iota // wildcard (*)
-	cDeep     = 1 << iota // deepscan
-
-	cRoot = 1 << iota // key is referred from root
-
-	cEmpty = 1 << 29 // empty number
-	cNAN   = 1 << 30 // not-a-number
-)
 
 // returns true if b matches one of the elements of seq
 func bytein(b byte, seq []byte) bool {
@@ -314,6 +292,9 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 	if nod.Type&cSlice > 0 && nod.Slice[0]+nod.Slice[1]+nod.Slice[2] == cEmpty*3 {
 		nod.Type |= cWild
 	}
+	if len(nod.Elems) > 0 {
+		nod.Type &^= cWild
+	}
 	i++ // ']'
 	return i, nil
 }
@@ -375,7 +356,8 @@ func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 	} else {
 		bound = 0
 	}
-	return path[s:e], toInt(path[s:e]), bound, i + step, flags(e-s, path[s], toInt(path[s:e])), nil
+	n := toInt(path[s:e])
+	return path[s:e], n, bound, i + step, flags(e-s, path[s], n), nil
 }
 
 // read quotedkey
@@ -424,11 +406,20 @@ func toInt(buf []byte) int {
 	if len(buf) == 0 {
 		return cEmpty
 	}
-	n, err := strconv.Atoi(string(buf))
-	if err != nil {
-		return cNAN
+	n := 0
+	sign := 1
+	for _, ch := range buf {
+		if ch == '-' {
+			sign = -1
+			continue
+		}
+		if ch >= '0' && ch <= '9' {
+			n = n*10 + int(ch-'0')
+		} else {
+			return cNAN
+		}
 	}
-	return n
+	return n * sign
 }
 
 func setKey(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
@@ -447,7 +438,7 @@ func setKey(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
 
 	if nod.Type&cAgg > 0 {
 		nod.Keys = append(nod.Keys, key)
-		if ikey != cNAN {
+		if ikey != cNAN && ikey != cEmpty {
 			nod.Elems = append(nod.Elems, ikey)
 		}
 		return nil
@@ -469,7 +460,7 @@ func setKey(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
 	}
 	// cDot
 	if len(key) > 0 {
-		nod.Keys = []word{key}
+		nod.Keys = append(nod.Keys, key)
 	}
 	nod.Slice[0] = ikey
 	nod.Type |= cDot
@@ -803,7 +794,7 @@ BFOR:
 
 		if found {
 			elems = append(elems, tElem{s, e})
-			if len(elems) == len(nod.Elems) {
+			if nod.Type&cFullScan == 0 && len(elems) == len(nod.Elems) {
 				break // $[1,2,3] --> found them all
 			}
 		}
@@ -833,7 +824,7 @@ func collectRecurse(input []byte, nod *tNode, elems []tElem, res []byte, inside 
 	for i := 0; i < len(nod.Elems); i++ {
 		e := nod.Elems[i]
 		if e < 0 {
-			e += len(nod.Elems)
+			e += len(elems)
 		}
 		if e >= 0 && e < len(elems) {
 			res, err = subSlice(input, nod, elems, e, res, inside) // recurse + deep
@@ -939,7 +930,7 @@ func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, res [
 	}
 
 	if nod.Type&cDot > 0 && len(res) > 0 {
-		return elems, res, i, nil
+		return elems, res, i, err
 	}
 
 	if b == i {

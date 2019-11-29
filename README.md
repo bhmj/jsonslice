@@ -53,127 +53,70 @@ func main() {
 `jsonslice.Get(data []byte, jsonpath string) ([]byte, error)`  
   - get a slice from raw json data specified by jsonpath
 
-## Benchmarks (Core i5-7500)
-
-```diff
-$ go test -bench=. -benchmem -benchtime=4s
-goos: linux
-goarch: amd64
-pkg: github.com/bhmj/jsonslice
-++ here's a couple of operations usually needed to get an object by jsonpath (for reference):
-Benchmark_Unmarshal-4                     500000             15487 ns/op            4496 B/op        130 allocs/op
-Benchmark_Oliveagle_Jsonpath-4           3000000              1981 ns/op             608 B/op         48 allocs/op
-++ and here's a jsonslice.Get:
-Benchmark_Jsonslice_Get-4                2000000              2840 ns/op              32 B/op          1 allocs/op
-++ Get() involves parsing a jsonpath, here it is:
-Benchmark_JsonSlice_ParsePath-4         10000000               579 ns/op               0 B/op          0 allocs/op
-++ in case you aggregate some non-contiguous elements, it may take a bit longer (extra mallocs involved):
-Benchmark_Jsonslice_Get_Aggregated-4     1000000              5853 ns/op            2178 B/op         10 allocs/op
-++ unmarshalling a large json:
-Benchmark_Unmarshal_10Mb-4                   100          47716510 ns/op             376 B/op          5 allocs/op
-++ jsonslicing the same json, target element is near the start:
-Benchmark_Jsonslice_Get_10Mb_First-4     5000000              1312 ns/op              32 B/op          1 allocs/op
-++ jsonslicing the same json, target element is near the end: still beats Unmarshal
-Benchmark_Jsonslice_Get_10Mb_Last-4          200          29554432 ns/op              37 B/op          1 allocs/op
-PASS
-ok      github.com/bhmj/jsonslice       71.377s
-
-```
-
 ## Specs
 
 See [Stefan Gössner's article](http://goessner.net/articles/JsonPath/index.html#e2) for original specs and examples.  
 
-## Limitations and deviations
+## Syntax features
 
-1. Single-word keys (`/\w+/`) are supported in dot notation mode; use bracket notation for multi-word keys.
+1. Classic dot notation (`$.simple_key`) is limited to alphanumeric characters. For more complex cases use `$['complex key!']` or `$.'complex key!'`. 
 
-2. A single index reference returns an element, not an array:  
+2. A single index reference returns an element, not an array; a slice reference always returns array:  
 ```
-./jsonslice '$.store.book[0]' sample0.json
+> echo '[{"id":1}, {"id":2}]' | ./jsonslice '$[0].id' 
+1
 ```
-returns  
 ```
-{
-  "category": "reference",
-  "author": "Nigel Rees",
-  "title": "Sayings of the Century",
-  "price": 8.95
-}
-```
-while this query
-```
-./jsonslice '$.store.book[0:1]' sample0.json
-```
-returns an array 
-```
-[{
-  "category": "reference",
-  "author": "Nigel Rees",
-  "title": "Sayings of the Century",
-  "price": 8.95
-}]
+> echo '[{"id":1}, {"id":2}]' | ./jsonslice '$[0:1]
+[1]
 ```
 
-Also, indexing on root node is supported (assuming json is an array and not an object):  
+3. Indexing or slicing on root node is supported (assuming json is an array and not an object):  
 ```
 ./jsonslice '$[0].author' sample1.json
 ```
 
 ## Expressions
 
-### Common expressions
-
-#### Operators 
+### Overview 
 ```
   $                   -- root node (can be either object or array)
   .node               -- dot-notated child
+  .'some node'        -- dot-notated child (syntax extension)
   ['node']            -- bracket-notated child
-  ['foo','bar']       -- bracket-notated children
-  [123]               -- array index
-  [12:34]             -- array range
+  ['foo','bar']       -- bracket-notated children (aggregation)
+  [5]                 -- array index
+  [-5]                -- negative index means "from the end"
+  [1:9]               -- array slice
+  [1:9:2]             -- array slice (+step)
+  .*  .[*]  .[:]      -- wildcard
+  ..key               -- deepscan
 ```
-#### Functions
+### Functions
 ```
   $.obj.length()      -- number of elements in an array or string length, depending on the obj type
   $.obj.count()       -- same as above
   $.val.size()        -- value size in bytes (as is)
 ```
-#### Objects
+### Slices
 ```
-  $.obj
-  $.obj.val
-  $.*                 -- wildcard (matches any value of any type)
-  $.*.val             -- wildcard object (matches any object)
-  $.*[:].val          -- wildcard array (matches any array)
+  $.arr[start:end:step]
+  $.arr[start:end]
 ```
-####  Indexed arrays
-```
-  $.obj[3]
-  $.obj[3].val
-  $.obj[-2]  -- second from the end
-```
-#### Ranged arrays
-```
-  $.obj[:]   -- == $.obj (all elements of the array)
-  $.obj[0:]  -- the same as above: items from index 0 (inclusive) till the end
-  $.obj[<anything>:0] -- doesn't make sense (from some element to the index 0 exclusive -- which is always empty)
-  $.obj[2:]  -- items from index 2 (inclusive) till the end
-  $.obj[:5]  -- items from the beginning to index 5 (exclusive)
-  $.obj[-2:] -- items from the second element from the end (inclusive) till the end
-  $.obj[:-2] -- items from the beginning to the second element from the end (exclusive, i.e. without two last elements)
-  $.obj[:-1] -- items from the beginning to the end but without one final element
-  $.obj[2:5] -- items from index 2 (inclusive) to index 5 (exclusive)
-```
+Selects elements from `start` (inclusive) to `end` (exclusive), stepping by `step`. If `step` is omitted or zero, then 1 is implied. Out-of-bounds values are reduced to the nearest bound.
 
-### Aggregating expressions
+If `step` is positive:
+  - empty `start` treated as the first element inclusive
+  - empty `end` treated as the last element inclusive
+  - `start` should be less then `end`, otherwise result would be empty
 
-#### Sub-querying
-```
-  $.obj[any:any].something  -- composite sub-query
-  $.obj[3,5,7]              -- multiple array indexes
-```
-#### Filters
+If `step` is negative:
+  - empty `start` treated as last element inclusive
+  - empty `end` treated as the first element inclusive
+  - `start` should be greater then `end`, otherwise result would be empty
+
+### Filters
+
 ```
   [?(<expression>)]  -- filter expression. Applicable to arrays only
   @                  -- the root of the current element of the array. Used only within a filter.
@@ -194,20 +137,9 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   `&&`  | Logical AND<br>`[?(@.price < 10 && @isbn)]`
   `\|\|`  | Logical OR<br>`[?(@.price > 10 \|\| @.category == 'reference')]`
 
-"Having" filter:  
-`$.stores[?(@.work_time[:].time_close=="16:00:00")])].id` -- find IDs of every store having at least one day with a closing time at 16:00
-
-### Updates (TODO)
-
-```
-  $.obj[?(@.price > 1000)].expensive = true                    -- add/replace field value
-  $.obj[?(@.authors.size() > 2)].title += " (multi authored)"  -- expand field value
-  $.obj[?(@.price > $.expensive)].bonus = $.bonuses[0].value   -- add/replace field using another jsonpath 
-```
-
 ## Examples
 
-  Assuming `sample0.json` and `sample1.json` in the example directory:  
+Assuming `sample0.json` and `sample1.json` in the example directory:  
 
   `cat sample0.json | ./jsonslice '$.store.book[0]'`  
   `cat sample0.json | ./jsonslice '$.store.book[0].title'`  
@@ -216,9 +148,38 @@ Also, indexing on root node is supported (assuming json is an array and not an o
   `cat sample0.json | ./jsonslice '$.store.book[?(@.price > 10)]'`  
   `cat sample0.json | ./jsonslice '$.store.book[?(@.price > $.expensive)]'`  
 
-  More examples can be found in `jsonslice_test.go`  
-  
+Much more examples can be found in `jsonslice_test.go`  
+
+## Benchmarks (Core i5-7500)
+
+```diff
+$ go test -bench=. -benchmem -benchtime=4s
+goos: linux
+goarch: amd64
+pkg: github.com/bhmj/jsonslice
+++ here's a couple of operations usually needed to get an object by jsonpath (for reference):
+Benchmark_Unmarshal-4                     500000             14712 ns/op            4368 B/op        130 allocs/op
+Benchmark_Oliveagle_Jsonpath-4           5000000              1560 ns/op             496 B/op         27 allocs/op
+++ and here's a jsonslice.Get:
+Benchmark_Jsonslice_Get_Simple-4         2000000              3878 ns/op             128 B/op          4 allocs/op
+++ Get() involves parsing a jsonpath, here it is:
+Benchmark_JsonSlice_ParsePath-4         10000000               858 ns/op             160 B/op          5 allocs/op
+++ in case you aggregate some non-contiguous elements, it may take a bit longer (extra mallocs involved):
+Benchmark_Jsonslice_Get_Aggregated-4     1000000              5671 ns/op             417 B/op         13 allocs/op
+++ usual unmarshalling a large json:
+Benchmark_Unmarshal_10Mb-4                   100          50744817 ns/op             248 B/op          5 allocs/op
+++ jsonslicing the same json, target element is near the start:
+Benchmark_Jsonslice_Get_10Mb_First-4     3000000              1851 ns/op             128 B/op          4 allocs/op
+++ jsonslicing the same json, target element is near the end: still beats Unmarshal
+Benchmark_Jsonslice_Get_10Mb_Last-4          200          38286509 ns/op             133 B/op          4 allocs/op
+PASS
+ok      github.com/bhmj/jsonslice       83.152s
+
+```
+
 ## Changelog
+
+**0.1.0** (2019-11-29) -- deepscan operator (`..`) added, slice with step `$[1:9:2]` is now supported, syntax extensions added.
 
 **0.7.6** (2019-09-11) -- bugfix: escaped backslash at the end of a string value.
 
@@ -266,9 +227,10 @@ Also, indexing on root node is supported (assuming json is an array and not an o
 - [x] filters: complex expressions (with logical operators)
 - [x] nested arrays support
 - [x] wildcard operator (`*`)
-- [ ] deepscan operator (`..`)
 - [x] bracket notation for multiple field queries
-- [ ] assignment in query (update json)
+- [x] deepscan operator (`..`)
+- [x] syntax extensions: `$.'keys with spaces'.price`
+- [x] flexible syntax: `$[0]` works on both `[1,2,3]` and `{"0":"abc"}`
 
 ## Contributing
 
