@@ -128,7 +128,7 @@ func getEmptyNode() *tNode {
 	nod.Keys = nod.Keys[:0]
 	nod.Slice[0] = cEmpty
 	nod.Slice[1] = cEmpty
-	nod.Slice[2] = cEmpty
+	nod.Slice[2] = 1
 	nod.Next = nil
 	nod.Type = 0
 	return nod
@@ -167,7 +167,7 @@ func Get(input []byte, path string) ([]byte, error) {
 		if n.Filter != nil {
 			for _, tok := range n.Filter.toks {
 				if tok.Operand != nil && tok.Operand.Node != nil && tok.Operand.Node.Type&cRoot > 0 {
-					val, err := getValue2(input, tok.Operand.Node, false)
+					val, err := getValue(input, tok.Operand.Node, false)
 					if err != nil {
 						// not found or other error
 						tok.Operand.Type = cOpNull
@@ -179,7 +179,7 @@ func Get(input []byte, path string) ([]byte, error) {
 		}
 	}
 
-	result, err := getValue2(input, node, false)
+	result, err := getValue(input, node, false)
 	repool(node)
 	return result, err
 }
@@ -444,12 +444,15 @@ func setKey(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
 	default:
 		return errPathInvalidChar
 	}
+
 	if nod.Type&cAgg > 0 {
 		nod.Keys = append(nod.Keys, key)
 		if ikey != cNAN {
 			nod.Elems = append(nod.Elems, ikey)
 		}
-	} else if nod.Type&cSlice > 0 {
+		return nil
+	}
+	if nod.Type&cSlice > 0 {
 		if ikey == cNAN || pos > 2 {
 			return errPathInvalidChar
 		}
@@ -462,13 +465,14 @@ func setKey(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
 			}
 		}
 		nod.Slice[pos] = ikey
-	} else {
-		if len(key) > 0 {
-			nod.Keys = []word{key}
-		}
-		nod.Slice[0] = ikey
-		nod.Type |= cDot
+		return nil
 	}
+	// cDot
+	if len(key) > 0 {
+		nod.Keys = []word{key}
+	}
+	nod.Slice[0] = ikey
+	nod.Type |= cDot
 	return nil
 }
 
@@ -488,15 +492,18 @@ func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
 	return true, i + 2, nil
 }
 
-func getValue2(input []byte, nod *tNode, inside bool) (result []byte, err error) {
+func getValue(input []byte, nod *tNode, inside bool) (result []byte, err error) {
 
-	if nod == nil || len(input) == 0 {
-		if !inside {
-			return input, nil
-		}
-		return input[0:len(input):len(input)], nil
+	if len(input) == 0 {
+		return nil, nil
 	}
-
+	if nod == nil {
+		e, err := skipValue(input, 0)
+		if !inside {
+			return input[:e], err
+		}
+		return input[:e:e], err
+	}
 	i, _ := skipSpaces(input, 0) // we're at the value
 	input = input[i:]
 
@@ -588,7 +595,7 @@ func arrayElemByFilter(input []byte, nod *tNode, inside bool) (result []byte, er
 			return nil, err
 		}
 		if b {
-			sub, err = getValue2(input[s:e], nod.Next, inside) // recurse
+			sub, err = getValue(input[s:e], nod.Next, inside) // recurse
 			if len(sub) > 0 {
 				result = plus(result, sub)
 			}
@@ -654,7 +661,7 @@ func objectDeep(input []byte, nod *tNode) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		deep, err = getValue2(input[s:e], nod, true) // recurse
+		deep, err = getValue(input[s:e], nod, true) // recurse
 		if err != nil {
 			return nil, err
 		}
@@ -718,7 +725,7 @@ func arrayElemByIndex(input []byte, nod *tNode, inside bool) ([]byte, error) {
 		}
 	}
 	if elem != nil { // $[3] or $[-3]
-		res, err = getValue2(elem, nod.Next, inside) // next node
+		res, err = getValue(elem, nod.Next, inside) // next node
 		if err != nil || nod.Type&cDeep == 0 {
 			return res, err
 		}
@@ -876,7 +883,7 @@ func subSlice(input []byte, nod *tNode, elems []tElem, i int, res []byte, inside
 	var sub []byte
 	var err error
 	if nod.Type&(cWild|cDeep) != cDeep {
-		sub, err = getValue2(input[elems[i].start:elems[i].end], nod.Next, inside)
+		sub, err = getValue(input[elems[i].start:elems[i].end], nod.Next, inside)
 		if err != nil {
 			return nil, err
 		}
@@ -885,7 +892,7 @@ func subSlice(input []byte, nod *tNode, elems []tElem, i int, res []byte, inside
 		}
 	}
 	if nod.Type&cDeep > 0 {
-		sub, err = getValue2(input[elems[i].start:elems[i].end], nod, true) // deepscan
+		sub, err = getValue(input[elems[i].start:elems[i].end], nod, true) // deepscan
 		if len(sub) > 0 {
 			res = plus(res, sub)
 		}
@@ -907,56 +914,91 @@ func subSlice(input []byte, nod *tNode, elems []tElem, i int, res []byte, inside
 	 - error    =
 */
 func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, res []byte, inside bool) ([][]byte, []byte, int, error) {
-	var s, e int
+	// var s, e int
 	var err error
-	var val []byte
+	// var val []byte
 
-	s, e, i, err = valuate(input, i) // s:e holds a value
+	// s, e, i, err = valuate(input, i) // s:e holds a value
+	// if err != nil {
+	// 	return elems, res, i, err
+	// }
+	// val = input[s:e]
+
+	i, err = skipSpaces(input, i)
 	if err != nil {
 		return elems, res, i, err
 	}
-	val = input[s:e]
 
+	b := i
 	if nod.Type&cWild > 0 {
-		elems, res, err = processKey(nod, nil, key, val, elems, res, inside)
+		elems, res, i, err = processKey(nod, nil, key, input, i, elems, res, inside)
 	} else {
 		for ii := range nod.Keys {
-			elems, res, err = processKey(nod, nod.Keys[ii], key, val, elems, res, inside)
+			elems, res, i, err = processKey(nod, nod.Keys[ii], key, input, i, elems, res, inside)
 		}
 	}
 
+	if nod.Type&cDot > 0 && len(res) > 0 {
+		return elems, res, i, nil
+	}
+
+	if b == i {
+		i, err = skipValue(input, i)
+		if err != nil {
+			return elems, res, i, err
+		}
+	}
+	i, err = skipSpaces(input, i)
 	return elems, res, i, err
 }
 
-func processKey(nod *tNode, nodkey []byte, key []byte, val []byte, elems [][]byte, res []byte, inside bool) ([][]byte, []byte, error) {
+func processKey(
+	nod *tNode,
+	nodkey []byte,
+	key []byte,
+	input []byte,
+	i int,
+	elems [][]byte,
+	res []byte,
+	inside bool,
+) ([][]byte, []byte, int, error) {
 	var err error
 	var deep []byte
 	var sub []byte
+	e := i
 	match := matchKeys(key, nodkey) || nod.Type&cWild > 0
 	if nod.Type&cDeep > 0 || match {
 		// key match
 		if nod.Type&cDeep == 0 { // $.a  $.a.x  $[a,b]  $.*
 			if len(nod.Keys) == 1 {
 				// $.a  $.a.x
-				res, err = getValue2(val, nod.Next, inside || nod.Type&cWild > 0) // recurse
-				return elems, res, err
+				res, err = getValue(input[i:], nod.Next, inside || nod.Type&cWild > 0) // recurse
+				return elems, res, i, err
 			}
 			// $[a,b]  $[a,b].x  $.*
-			sub, err = getValue2(val, nod.Next, inside || nod.Type&cWild > 0)
+			e, err = skipValue(input, i)
+			if err != nil {
+				return elems, res, i, err
+			}
+			sub, err = getValue(input[i:e], nod.Next, inside || nod.Type&cWild > 0)
 			if len(sub) > 0 {
 				elems = append(elems, sub)
 			}
 		} else { // deep: $..a  $..[a,b]
-			if match {
-				res = plus(res, val)
+			e, err = skipValue(input, i)
+			if err != nil {
+				return elems, res, i, err
 			}
-			deep, err = getValue2(val, nod, true) // deepscan
+			if match {
+				res = plus(res, input[i:e:e])
+			}
+			deep, err = getValue(input[i:e:e], nod, true) // deepscan
 			if len(deep) > 0 {
 				res = plus(res, deep)
 			}
 		}
 	}
-	return elems, res, err
+	return elems, res, e, err
 }
 
 func matchKeys(key []byte, nodkey []byte) bool {
@@ -1043,6 +1085,9 @@ type tElem struct {
 //     empty end = first item (included)
 //
 func adjustBounds(start int, stop int, step int, n int) (int, int, int, error) {
+	if n == 0 {
+		return 0, 0, 0, nil
+	}
 	if step == 0 || step == cEmpty {
 		step = 1
 	}

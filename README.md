@@ -53,9 +53,6 @@ func main() {
 `jsonslice.Get(data []byte, jsonpath string) ([]byte, error)`  
   - get a slice from raw json data specified by jsonpath
 
-`jsonslice.GetArrayElements(data []byte, jsonpath string, alloc int) ([][]byte, error)`
-  - get a slice of array elements from raw json data specified by jsonpath
-
 ## Benchmarks (Core i5-7500)
 
 ```diff

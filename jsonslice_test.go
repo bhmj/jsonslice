@@ -272,14 +272,17 @@ func Test_Expressions(t *testing.T) {
 		{`$.store.book[0].*`, []byte(`["reference","Nigel Rees","Sayings of the Century",8.95]`)},
 		// wildcard: named key on a given level
 		{`$.store.*.price`, []byte(`[19.95]`)},
-
 		// wildcard: named key in any array on a given level
 		{`$.store.*[:].price`, []byte(`[8.95,12.99,8.99,22.99]`)},
+		// wildcard: named key in any array (sliced) on a given level
+		{`$.store.*[1:3].price`, []byte(`[12.99,8.99]`)},
 
 		// all elements of an empty array is an empty array
 		{`$.store.manager[:]`, []byte(`[]`)},
 		// multiple keys (output ordered as in data)
 		{`$.store.book[:]['price','title']`, []byte(`["Sayings of the Century",8.95,"Sword of Honour",12.99,"Moby Dick",8.99,"The Lord of the Rings",22.99]`)},
+		// multiple keys over a sliced array
+		{`$.store.book[1:3]['price','title']`, []byte(`["Sword of Honour",12.99,"Moby Dick",8.99]`)},
 		// multiple keys combined with filter
 		{`$.store.book[?(@.price > $.expensive*1.1)]['price','title']`, []byte(`["Sword of Honour",12.99,"The Lord of the Rings",22.99]`)},
 		// functions in filter
@@ -287,6 +290,7 @@ func Test_Expressions(t *testing.T) {
 	}
 
 	for _, tst := range tests {
+		println(tst.Query)
 		res, err := Get(data, tst.Query)
 		if err != nil {
 			t.Errorf(tst.Query + " : " + err.Error())
@@ -297,19 +301,17 @@ func Test_Expressions(t *testing.T) {
 }
 
 func Test_Extensions(t *testing.T) {
-	/*
-		variant1 := []byte(`
-								{
-									"book": [
-										{"Author": "J.R.R.Tolkien", "Title": "Lord of the Rings"},
-										{"Author": "Z.Hopp", "Title": "Trollkrittet"}
-									]
-								}
-							`)
-		variant2 := []byte(`{ "book": [ {"Book one"}, {"Book two"}, {"Book three"}, {"Book four"} ] }`)
-		variant3 := []byte(`{"a": "first", "2": "second", "b": "third"}`)
-		variant4 := []byte(`["first", "second", "third"]`)
-	*/
+	variant1 := []byte(`
+										{
+											"book": [
+												{"Author": "J.R.R.Tolkien", "Title": "Lord of the Rings"},
+												{"Author": "Z.Hopp", "Title": "Trollkrittet"}
+											]
+										}
+									`)
+	variant2 := []byte(`{ "book": [ {"Book one"}, {"Book two"}, {"Book three"}, {"Book four"} ] }`)
+	variant3 := []byte(`{"a": "first", "2": "second", "b": "third"}`)
+	variant4 := []byte(`["first", "second", "third"]`)
 	variant5 := []byte(`["first", "second", "third", "fourth", "fifth"]`)
 	variant6 := []byte(`{"key":"value"}`)
 	variant7 := []byte(`{"key":"value", "another":"entry"}`)
@@ -342,28 +344,26 @@ func Test_Extensions(t *testing.T) {
 		Base     []byte
 		Expected []byte
 	}{
-		/*
-			// custom extensions
-			{`$.'book'[1]`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
-			{`$.'book'.1`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
-			// wildcard ignored if not alone (but still aggregates!)
-			//{`$.book[1,*]`, variant1, []byte(`[{"Author": "Z.Hopp", "Title": "Trollkrittet"}]`)},
+		// custom extensions
+		{`$.'book'[1]`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
+		{`$.'book'.1`, variant1, []byte(`{"Author": "Z.Hopp", "Title": "Trollkrittet"}`)},
+		// wildcard ignored if not alone (but still aggregates!)
+		//{`$.book[1,*]`, variant1, []byte(`[{"Author": "Z.Hopp", "Title": "Trollkrittet"}]`)},
 
-			// gold standard
+		// gold standard
 
-			// array index dot notation
-			{`$.book.2`, variant2, []byte(`{"Book three"}`)},
-			// array index dot notation on object
-			{`$.2`, variant3, []byte(`"second"`)},
-			// array index slice end out of bounds
-			{`$[1:10]`, variant4, []byte(`["second", "third"]`)},
-			// array index slice negative step
-			{`$[::-2]`, variant5, []byte(`["fifth","third","first"]`)},
-			// Array index slice start end negative step
-			{`$[3:0:-2]`, variant5, []byte(`["fourth","second"]`)},
-			// Array index slice start end step
-			{`$[0:3:2]`, variant5, []byte(`["first","third"]`)},
-		*/
+		// array index dot notation
+		{`$.book.2`, variant2, []byte(`{"Book three"}`)},
+		// array index dot notation on object
+		{`$.2`, variant3, []byte(`"second"`)},
+		// array index slice end out of bounds
+		{`$[1:10]`, variant4, []byte(`["second", "third"]`)},
+		// array index slice negative step
+		{`$[::-2]`, variant5, []byte(`["fifth","third","first"]`)},
+		// Array index slice start end negative step
+		{`$[3:0:-2]`, variant5, []byte(`["fourth","second"]`)},
+		// Array index slice start end step
+		{`$[0:3:2]`, variant5, []byte(`["first","third"]`)},
 		// Array index slice start end step 0
 		{`$[0:3:0]`, variant5, []byte(`["first", "second", "third"]`)},
 		// Array index slice start end step 1
@@ -441,6 +441,7 @@ func Test_Extensions(t *testing.T) {
 
 	for _, tst := range tests {
 		prev := append(tst.Base[:0:0], tst.Base...)
+		println(tst.Query)
 		res, err := Get(tst.Base, tst.Query)
 		if err != nil {
 			t.Errorf(tst.Query + " : " + err.Error())
@@ -561,98 +562,6 @@ func Test_Errors(t *testing.T) {
 	}
 }
 
-func NoTest_ArraySlice(t *testing.T) {
-
-	tests := []struct {
-		Data     []byte
-		Query    string
-		Expected [][]byte
-	}{
-		// closing square bracket inside a string value has been mistakenly taken as an array bound
-		{condensed, `$.store.bicycle.equipment[0]`, [][]byte{
-			[]byte(`["paddles", "umbrella", "horn"]`),
-		}},
-		{condensed, `$.store.bicycle.equipment[0,2]`, [][]byte{
-			[]byte(`["paddles", "umbrella", "horn"]`),
-			[]byte(`["light saber", "apparel"]`),
-		}},
-		{condensed, `$.store.bicycle.equipment[-1]`, [][]byte{
-			[]byte(`["\"quoted\""]`),
-		}},
-		{condensed, `$.store.book[:]`, [][]byte{
-			[]byte(`{"category":"reference", "author":"Nigel Rees", "title":"Sayings of the Century", "price":8.95}`),
-			[]byte(`{"category":"fiction", "author":"Evelyn Waugh", "title":"Sword of Honour", "price":12.99}`),
-			[]byte(`{"category":"fiction", "author":"Herman Melville", "title": "Moby Dick", "isbn": "0-553-21311-3", "price": 8.99}`),
-			[]byte(`{"category":"fiction", "author":"J. R. R. Tolkien",	"title":"The Lord of the Rings", "isbn":"0-395-19395-8", "price":22.99}`),
-		}},
-		{condensed, `$.store.bicycle.equipment[1:3]`, [][]byte{
-			[]byte(`["peg leg", "parrot", "map"]`),
-			[]byte(`["light saber", "apparel"]`),
-		}},
-	}
-
-	for _, tst := range tests {
-		res, err := GetArrayElements(tst.Data, tst.Query, 2)
-		if err != nil {
-			t.Errorf(tst.Query + " : " + err.Error())
-		} else if len(res) != len(tst.Expected) {
-			t.Errorf(tst.Query+" : result length mismatch (%d expected, %d received)", len(tst.Expected), len(res))
-		} else {
-			for i := range res {
-				if compareSlices(res[i], tst.Expected[i]) != 0 {
-					t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected[i]) + "`\n\tbut got  `" + string(res[i]) + "`")
-				}
-			}
-		}
-	}
-}
-
-func NoTest_ArraySlice_Errors(t *testing.T) {
-
-	tests := []struct {
-		Data     []byte
-		Query    string
-		Expected string
-	}{
-		// start with $
-		{data, `foo`, `path: $ expected`},
-		// empty
-		{data, ``, `path: empty`},
-		// unexpected end
-		{data, `$.`, `path: unexpected end of path`},
-		// bad function
-		{data, `$.foo()`, `path: unknown function`},
-
-		// unexpected EOF before :
-		{[]byte(`   `), `$.foo`, `unexpected end of input`},
-		// invalid value format
-		{[]byte(`xxx`), `$.foo`, `object or array expected`},
-
-		// gae() limitations
-		{data, `$.store.*.foo`, `wildcards are not supported in GetArrayElements`},
-		// gae() limitations
-		{data, `$.store.length()`, `functions are not supported in GetArrayElements`},
-		// gae() limitations
-		{data, `$.store.book[:].foo[:]`, `sub-slicing is not supported in GetArrayElements`},
-
-		// array index bounds
-		{condensed, `$.store.bicycle.equipment[5]`, `specified array element not found`},
-		// array index bounds
-		{condensed, `$.store.bicycle.equipment[0:5]`, `specified array element not found`},
-		// array index bounds
-		{condensed, `$.store.bicycle.equipment[-8]`, `specified array element not found`},
-	}
-
-	for _, tst := range tests {
-		_, err := GetArrayElements(tst.Data, tst.Query, 2)
-		if err == nil {
-			t.Errorf(tst.Query + " : error expected")
-		} else if err.Error() != tst.Expected {
-			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(err.Error()) + "`")
-		}
-	}
-}
-
 func Benchmark_Unmarshal(b *testing.B) {
 	var jdata interface{}
 	for i := 0; i < b.N; i++ {
@@ -760,6 +669,7 @@ func Benchmark_Oliveagle_Jsonpath_10Mb_Last(b *testing.B) {
 func Benchmark_Jsonslice_Get_10Mb_First(b *testing.B) {
 	b.StopTimer()
 	largeData := GenerateLargeData()
+	println(len(largeData))
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = Get(largeData, "$.store.book[0].title")

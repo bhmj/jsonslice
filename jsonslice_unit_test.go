@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func Test_ajustBounds(t *testing.T) {
+func Test_AdjustBounds(t *testing.T) {
 	type Input struct{ left, right, step int }
 	type Expected struct {
 		a, b, step int
