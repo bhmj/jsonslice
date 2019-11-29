@@ -138,7 +138,15 @@ func readFilter(path []byte, i int, nod *tNode) (int, error) {
 	}
 
 	nod.Filter = &tFilter{toks: reverse(result.get())}
+	nod.Type |= cFilter
+	nod.Type &^= cDot
 
+	if i < l {
+		i++ // ')'
+		if i < l && path[i] == ']' {
+			i++
+		}
+	}
 	return i, nil
 }
 
@@ -181,9 +189,12 @@ func tokComplex(path []byte, i int) (int, *tToken, error) {
 	l := len(path)
 	// jsonpath node
 	if path[i] == '@' || path[i] == '$' {
-		nod, j, err := parsePath(path[i:])
+		nod, j, err := readRef(path[i:], 1, 0)
 		if err != nil {
 			return 0, nil, err
+		}
+		if path[i] == '$' {
+			nod.Type |= cRoot
 		}
 		i += j
 		return i, &tToken{Operand: &tOperand{Type: cOpNone, Node: nod}}, nil
@@ -318,8 +329,8 @@ func evalToken(input []byte, toks []*tToken) (*tOperand, []*tToken, error) {
 	tok := toks[0]
 	if tok.Operand != nil {
 		if tok.Operand.Node != nil {
-			val, err := getValue(input, tok.Operand.Node)
-			if err != nil {
+			val, err := getValue(input, tok.Operand.Node, false)
+			if len(val) == 0 || err != nil {
 				// not found or other error
 				tok.Operand.Type = cOpNull
 				return tok.Operand, toks[1:], nil
