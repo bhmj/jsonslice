@@ -52,9 +52,9 @@ type tOperand struct {
 	Regexp *regexp.Regexp
 }
 
-var operator = [...]string{">=", "<=", "==", "!=", "=~", ">", "<", "&&", "||"}
-var operatorCode = [...]byte{'G', 'L', 'E', 'N', 'R', 'g', 'l', '&', '|'}
-var operatorPrecedence = map[byte]int{'&': 1, '|': 1, 'g': 2, 'l': 2, 'E': 2, 'N': 2, 'R': 2, 'G': 2, 'L': 2, '+': 3, '-': 3, '*': 4, '/': 4}
+var operator = [...]string{">=", "<=", "==", "!=~", "!~", "!=", "=~", ">", "<", "&&", "||"}
+var operatorCode = [...]byte{'G', 'L', 'E', 'r', 'r', 'N', 'R', 'g', 'l', '&', '|'}
+var operatorPrecedence = map[byte]int{'&': 1, '|': 1, 'g': 2, 'l': 2, 'E': 2, 'N': 2, 'R': 2, 'r': 2, 'G': 2, 'L': 2, '+': 3, '-': 3, '*': 4, '/': 4}
 
 type stack struct {
 	s []*tToken
@@ -165,7 +165,7 @@ func nextToken(path []byte, i int, prevOperator byte) (int, *tToken, error) {
 			break
 		}
 		// regexp
-		if path[i] == '/' && prevOperator == 'R' {
+		if path[i] == '/' && prevOperator&^('r'-'R') == 'R' {
 			return readRegexp(path, i)
 		}
 		// number
@@ -405,7 +405,7 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 	if op == '+' || op == '-' || op == '*' || op == '/' {
 		// arithmetic
 		return opArithmetic(op, left, right)
-	} else if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' || op == 'R' {
+	} else if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' || op == 'R' || op == 'r' {
 		// comparison
 		return opComparison(op, left, right)
 	} else if op == '&' || op == '|' {
@@ -443,7 +443,7 @@ func opComparison(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 		res.Bool = false
 		return &res, nil
 	}
-	if op == 'R' {
+	if op == 'R' || op == 'r' {
 		if !(left.Type == cOpString && right.Type == cOpRegexp) {
 			return nil, errInvalidRegexp
 		}
@@ -511,6 +511,8 @@ func opComparisonString(op byte, left *tOperand, right *tOperand) (*tOperand, er
 		res.Bool = compareSlices(left.Str, right.Str) != 0
 	case 'R':
 		res.Bool = right.Regexp.MatchString(string(left.Str))
+	case 'r':
+		res.Bool = !right.Regexp.MatchString(string(left.Str))
 	default:
 		return left, errInvalidOperatorStrings
 	}

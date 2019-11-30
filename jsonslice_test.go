@@ -258,10 +258,14 @@ func Test_Expressions(t *testing.T) {
 		// numbers (+)
 		{`$.store.book[?(@.price != 22.99)].price`, []byte(`[8.95,12.99,8.99]`)},
 
-		// regexp
+		// regexp: simple
 		{`$.store.book[?(@.title =~ /the/i)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
-		// regexp
+		// regexp: complex
 		{`$.store.book[?(@.title =~ /(Saying)|(Lord)/)].title`, []byte(`["Sayings of the Century","The Lord of the Rings"]`)},
+		// regexp: not equal
+		{`$.store.book[?(@.title !=~ /(Saying)|(Lord)/)].title`, []byte(`["Sword of Honour","Moby Dick"]`)},
+		// regexp: same as above plus syntax variation: != or !=~
+		{`$.store.book[?(@.title !=~ /saying/i && @.title !~ /Lord/)].title`, []byte(`["Sword of Honour","Moby Dick"]`)},
 
 		// array of arrays
 		{`$.store.bicycle.equipment[1][0]`, []byte(`"peg leg"`)},

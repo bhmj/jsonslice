@@ -2,7 +2,6 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/bhmj/jsonslice)](https://goreportcard.com/report/github.com/bhmj/jsonslice)
 [![GoDoc](https://godoc.org/github.com/bhmj/jsonslice?status.svg)](https://godoc.org/github.com/bhmj/jsonslice)
 
-
 # JSON Slice
 
 ## What is it?
@@ -134,6 +133,7 @@ If `step` is negative:
   `<`   | Less than
   `<=`  | Less than or equal to
   `=~`  | Match a regexp<br>`[?(@.name =~ /sword.*/i]`
+  `!~` or `!=~`  | Don't match a regexp<br>`[?(@.name !~ /sword.*/i]`
   `&&`  | Logical AND<br>`[?(@.price < 10 && @isbn)]`
   `\|\|`  | Logical OR<br>`[?(@.price > 10 \|\| @.category == 'reference')]`
 
@@ -179,7 +179,9 @@ ok      github.com/bhmj/jsonslice       83.152s
 
 ## Changelog
 
-**0.1.0** (2019-11-29) -- deepscan operator (`..`) added, slice with step `$[1:9:2]` is now supported, syntax extensions added.
+**0.1.1** (2019-12-01) -- "not equal" regexp operator added (`!=~` or `!~`).
+
+**0.1.0** (2019-11-29) -- deepscan operator (`..`) added, slice with step `$[1:9:2]` is now supported, syntax extensions added. `GetArrayElements()` removed.
 
 **0.7.6** (2019-09-11) -- bugfix: escaped backslash at the end of a string value.
 
@@ -227,10 +229,11 @@ ok      github.com/bhmj/jsonslice       83.152s
 - [x] filters: complex expressions (with logical operators)
 - [x] nested arrays support
 - [x] wildcard operator (`*`)
-- [x] bracket notation for multiple field queries
+- [x] bracket notation for multiple field queries (`$['a','b']`)
 - [x] deepscan operator (`..`)
 - [x] syntax extensions: `$.'keys with spaces'.price`
 - [x] flexible syntax: `$[0]` works on both `[1,2,3]` and `{"0":"abc"}`
+- [ ] Optionally unmarshal the result
 
 ## Contributing
 

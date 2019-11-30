@@ -1,7 +1,7 @@
 package jsonslice
 
 /**
-  JsonSlice 1.0.0
+  JsonSlice 1.0.1
   Michael Gurov, 2018-2019
   MIT licenced
 
@@ -97,7 +97,7 @@ const (
 	cFullScan = 1 << iota // array slice: need fullscan
 	cFilter   = 1 << iota // filter
 	cWild     = 1 << iota // wildcard (*)
-	cDeep     = 1 << iota // deepscan
+	cDeep     = 1 << iota // deepscan (..)
 
 	cRoot = 1 << iota // key is referred from root
 
@@ -237,7 +237,7 @@ func readRef(path []byte, i int, uptype int) (*tNode, int, error) {
 	// single key
 	key, nod.Slice[0], sep, i, flags, err = readKey(path, i)
 	if len(key) > 0 {
-		nod.Keys = []word{key}
+		nod.Keys = append(nod.Keys, key)
 	}
 	nod.Type |= flags // cWild, cFullScan
 	if i == l {
@@ -289,7 +289,7 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 	if i == l {
 		return i, errPathUnexpectedEnd
 	}
-	if nod.Type&cSlice > 0 && nod.Slice[0]+nod.Slice[1]+nod.Slice[2] == cEmpty*3 {
+	if nod.Type&cSlice > 0 && nod.Slice[0]+nod.Slice[1]+nod.Slice[2] == 2*cEmpty+1 {
 		nod.Type |= cWild
 	}
 	if len(nod.Elems) > 0 {
