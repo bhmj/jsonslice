@@ -853,7 +853,7 @@ func sliceRecurse(input []byte, nod *tNode, elems []tElem) ([]byte, error) {
 	}
 	if nod.Type&(cFullScan|cDeep|cWild) > 0 {
 		for ; (a > b && step < 0) || (a < b && step > 0); a += step {
-			res, err = subSlice(input, nod, elems, a, res, true) // slice is aggregated => true
+			res, err = subSlice(input, nod, elems, a, res, false) // TODO: make option to switch this to TRUE (nested aggregation)
 			if err != nil {
 				return nil, err
 			}
@@ -861,7 +861,7 @@ func sliceRecurse(input []byte, nod *tNode, elems []tElem) ([]byte, error) {
 	} else {
 		// 5.2) special case: elems already filtered
 		for i := 0; i < len(elems); i++ {
-			res, err = subSlice(input, nod, elems, i, res, true) // slice is aggregated => true
+			res, err = subSlice(input, nod, elems, i, res, false) // TODO: make option to switch this to TRUE (nested aggregation)
 			if err != nil {
 				return nil, err
 			}
@@ -922,10 +922,10 @@ func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, res [
 
 	b := i
 	if nod.Type&cWild > 0 {
-		elems, res, i, err = processKey(nod, nil, key, input, i, elems, res, inside)
+		elems, res, i, err = processKey(nod, nil, key, input, i, elems, res, false) // TODO: make option to switch the last FALSE to "inside" (nested aggregation)
 	} else {
 		for ii := range nod.Keys {
-			elems, res, i, err = processKey(nod, nod.Keys[ii], key, input, i, elems, res, inside)
+			elems, res, i, err = processKey(nod, nod.Keys[ii], key, input, i, elems, res, false) // TODO: make option to switch the last FALSE to "inside" (nested aggregation)
 		}
 	}
 

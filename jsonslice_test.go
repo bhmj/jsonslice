@@ -284,9 +284,9 @@ func Test_Expressions(t *testing.T) {
 		// all elements of an empty array is an empty array
 		{`$.store.manager[:]`, []byte(`[]`)},
 		// multiple keys (output ordered as in data)
-		{`$.store.book[:]['price','title']`, []byte(`["Sayings of the Century",8.95,"Sword of Honour",12.99,"Moby Dick",8.99,"The Lord of the Rings",22.99]`)},
+		{`$.store.book[:]['price','title']`, []byte(`[["Sayings of the Century",8.95],["Sword of Honour",12.99],["Moby Dick",8.99],["The Lord of the Rings",22.99]]`)},
 		// multiple keys over a sliced array
-		{`$.store.book[1:3]['price','title']`, []byte(`["Sword of Honour",12.99,"Moby Dick",8.99]`)},
+		{`$.store.book[1:3]['price','title']`, []byte(`[["Sword of Honour",12.99],["Moby Dick",8.99]]`)},
 		// multiple keys combined with filter
 		{`$.store.book[?(@.price > $.expensive*1.1)]['price','title']`, []byte(`["Sword of Honour",12.99,"The Lord of the Rings",22.99]`)},
 		// functions in filter
@@ -342,6 +342,8 @@ func Test_Extensions(t *testing.T) {
 	variantH := []byte(`["string", 42, {"key":"value"}, [0,1]]`)
 	variantI := []byte(`{"some": "string", "int": 42, "object": {"key":"value"}, "array": [0,1]}`)
 	variantJ := []byte(`[{"bar": [{"baz": "hello"}]}]`)
+	variantK := []byte(`[{"key": [{"baz": ["hello"]}], "foo": [{"key": ["eee!", {"key":[{"ouch":2}]}]}]}]`)
+	variantL := []byte(`{"a":{"b":[{"c":"cc1","d":"dd1"},{"c":"cc2","d":"dd2"}]}}`)
 
 	tests := []struct {
 		Query    string
@@ -433,11 +435,16 @@ func Test_Extensions(t *testing.T) {
 		// Wildcard bracket notation on object
 		{`$[*]`, variantI, []byte(`["string",42,{"key":"value"},[0,1]]`)},
 		// Wildcard bracket notation with key on nested objects
-		{`$[*].bar[*].baz`, variantJ, []byte(`["hello"]`)},
+		{`$[*].bar[*].baz`, variantJ, []byte(`[["hello"]]`)},
 		// Wildcard dot notation on array
 		{`$.*`, variantH, []byte(`["string",42,{"key":"value"},[0,1]]`)},
 		// Wildcard dot notation on object
 		{`$.*`, variantI, []byte(`["string",42,{"key":"value"},[0,1]]`)},
+
+		// variations
+
+		{`$..key..[0]`, variantK, []byte(`[[{"baz": ["hello"]}],["eee!", {"key":[{"ouch":2}]}],[{"ouch":2}]]`)},
+		{`$.a.b[:].['c','d']`, variantL, []byte(`[["cc1","dd1"],["cc2","dd2"]]`)},
 	}
 
 	for _, tst := range tests {
