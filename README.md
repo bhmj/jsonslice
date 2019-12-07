@@ -129,7 +129,7 @@ If `step` is negative:
   `==`  | Equal to<br>Use single or double quotes for string expressions.<br>`[?(@.color=='red')]` or `[?(@.color=="red")]`
   `!=`  | Not equal to<br>`[?(@.author != "Herman Melville")]`
   `>`   | Greater than<br>`[?(@.price > 10)]`
-  `>=`  | Grater than or equal to
+  `>=`  | Greater than or equal to
   `<`   | Less than
   `<=`  | Less than or equal to
   `=~`  | Match a regexp<br>`[?(@.name =~ /sword.*/i]`
@@ -188,7 +188,7 @@ ok      github.com/bhmj/jsonslice       83.152s
 **0.7.6** (2019-09-11) -- bugfix: escaped backslash at the end of a string value.
 
 **0.7.5** (2019-05-21) -- Functions `count()`, `size()`, `length()` work in filters.
-> `$.store.bicycle.equipment[?(@.count() = 2)]` -> `[["light saber", "apparel"]]`  
+> `$.store.bicycle.equipment[?(@.count() == 2)]` -> `[["light saber", "apparel"]]`  
 
 **0.7.4** (2019-03-01) -- Mallocs reduced (see Benchmarks section).
 
