@@ -1,0 +1,12 @@
+ports:
+  - port: 8080
+checkoutLocation: "src/github.com/bhmj/jsonslice"
+workspaceLocation: "."
+tasks:
+  - init: >
+      cd /workspace/src/github.com/bhmj/jsonslice &&
+      go get -v ./... &&
+      go build -o app
+    command: >
+      cd /workspace/src/github.com/bhmj/jsonslice &&
+      ./app
