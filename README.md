@@ -107,12 +107,12 @@ Selects elements from `start` (inclusive) to `end` (exclusive), stepping by `ste
 If `step` is positive:
   - empty `start` treated as the first element inclusive
   - empty `end` treated as the last element inclusive
-  - `start` should be less then `end`, otherwise result would be empty
+  - `start` should be less then `end`, otherwise result will be empty
 
 If `step` is negative:
   - empty `start` treated as last element inclusive
   - empty `end` treated as the first element inclusive
-  - `start` should be greater then `end`, otherwise result would be empty
+  - `start` should be greater then `end`, otherwise result will be empty
 
 ### Filters
 
