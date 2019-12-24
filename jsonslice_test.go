@@ -472,7 +472,9 @@ func Test_Fixes(t *testing.T) {
 		// closing square bracket inside a string value has been mistakenly seen as an array bound
 		{[]byte(`{"foo":["[]"],"bar":123}`), `$.bar`, []byte(`123`)},
 		// escaped backslash at the end of string caused parser to miss the end of string
-		{[]byte(`{"foo":"\\","bar":123}`), `$.bar`, []byte(`123`)},
+		{[]byte(`{"foo":"foo \\","bar":123}`), `$.foo`, []byte(`"foo \\"`)},
+		// escaped backslash at the end of string caused parser to miss the end of string
+		{[]byte(`[{"foo":"foo \\","bar":123}]`), `$[0].foo`, []byte(`"foo \\"`)},
 	}
 
 	for _, tst := range tests {

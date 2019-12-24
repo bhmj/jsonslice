@@ -1268,14 +1268,18 @@ func skipObject(input []byte, i int) (int, error) {
 	unmark := mark + 2 // ] or }
 	nested := 0
 	instr := false
-	prev := mark
 	i++
 	for i < l && !(input[i] == unmark && nested == 0 && !instr) {
 		ch := input[i]
-		if ch == '"' {
-			if prev != '\\' {
-				instr = !instr
+		if ch == '\\' {
+			i += 2
+			if i >= l {
+				return i, errUnexpectedEnd
 			}
+			continue
+		}
+		if ch == '"' {
+			instr = !instr
 		} else if !instr {
 			if ch == mark {
 				nested++
@@ -1283,7 +1287,6 @@ func skipObject(input []byte, i int) (int, error) {
 				nested--
 			}
 		}
-		prev = ch
 		i++
 	}
 	if i == l {

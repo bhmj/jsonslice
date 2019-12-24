@@ -179,6 +179,8 @@ ok      github.com/bhmj/jsonslice       83.152s
 
 ## Changelog
 
+**0.1.3** (2019-12-24) -- bugfix: `$[0].foo` `[{"foo":"\\"}]` generated "unexpected end of input"
+
 **0.1.2** (2019-12-07) -- nested aggregation (`$[:].['a','b']`) now works as expected. TODO: add option to switch nested aggregation mode at runtime!
 
 **0.1.1** (2019-12-01) -- "not equal" regexp operator added (`!=~` or `!~`).
