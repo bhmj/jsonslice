@@ -179,13 +179,13 @@ ok      github.com/bhmj/jsonslice       83.152s
 
 ## Changelog
 
-**0.1.3** (2019-12-24) -- bugfix: `$[0].foo` `[{"foo":"\\"}]` generated "unexpected end of input"
+**1.0.3** (2019-12-24) -- bugfix: `$[0].foo` `[{"foo":"\\"}]` generated "unexpected end of input"
 
-**0.1.2** (2019-12-07) -- nested aggregation (`$[:].['a','b']`) now works as expected. TODO: add option to switch nested aggregation mode at runtime!
+**1.0.2** (2019-12-07) -- nested aggregation (`$[:].['a','b']`) now works as expected. TODO: add option to switch nested aggregation mode at runtime!
 
-**0.1.1** (2019-12-01) -- "not equal" regexp operator added (`!=~` or `!~`).
+**1.0.1** (2019-12-01) -- "not equal" regexp operator added (`!=~` or `!~`).
 
-**0.1.0** (2019-11-29) -- deepscan operator (`..`) added, slice with step `$[1:9:2]` is now supported, syntax extensions added. `GetArrayElements()` removed.
+**1.0.0** (2019-11-29) -- deepscan operator (`..`) added, slice with step `$[1:9:2]` is now supported, syntax extensions added. `GetArrayElements()` removed.
 
 **0.7.6** (2019-09-11) -- bugfix: escaped backslash at the end of a string value.
 
