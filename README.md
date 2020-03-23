@@ -66,7 +66,7 @@ See [Stefan Gössner's article](http://goessner.net/articles/JsonPath/index.html
 1
 ```
 ```
-> echo '[{"id":1}, {"id":2}]' | ./jsonslice '$[0:1]
+> echo '[{"id":1}, {"id":2}]' | ./jsonslice '$[0:1].id'
 [1]
 ```
 
