@@ -8,8 +8,6 @@ import (
 	"math/rand"
 	"testing"
 	"time"
-
-	"github.com/oliveagle/jsonpath"
 )
 
 var data []byte
@@ -470,11 +468,18 @@ func Test_Fixes(t *testing.T) {
 		Expected []byte
 	}{
 		// closing square bracket inside a string value has been mistakenly seen as an array bound
+		// fixed in 0.7.2
 		{[]byte(`{"foo":["[]"],"bar":123}`), `$.bar`, []byte(`123`)},
 		// escaped backslash at the end of string caused parser to miss the end of string
+		// fixed in 1.0.3
 		{[]byte(`{"foo":"foo \\","bar":123}`), `$.foo`, []byte(`"foo \\"`)},
 		// escaped backslash at the end of string caused parser to miss the end of string
+		// fixed in 1.0.3
 		{[]byte(`[{"foo":"foo \\","bar":123}]`), `$[0].foo`, []byte(`"foo \\"`)},
+		// https://github.com/bhmj/jsonslice/issues/12
+		// $+ is obviously invalid but acts as simple $ now
+		// fixed in 1.0.4
+		{[]byte(`[{"foo":"bar"}]`), `$+`, []byte(`[{"foo":"bar"}]`)},
 	}
 
 	for _, tst := range tests {
@@ -585,20 +590,6 @@ func Benchmark_Unmarshal(b *testing.B) {
 	}
 }
 
-func Benchmark_Oliveagle_Jsonpath(b *testing.B) {
-	b.StopTimer()
-	var jdata interface{}
-	err := json.Unmarshal(data, &jdata)
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = jsonpath.JsonPathLookup(jdata, "$.store.book[3].title")
-	}
-}
-
 func Benchmark_JsonSlice_ParsePath(b *testing.B) {
 	b.StopTimer()
 	path := []byte("$.store.book.thule.foo.bar")
@@ -659,29 +650,6 @@ func Benchmark_Unmarshal_10Mb(b *testing.B) {
 	}
 }
 
-/*
-func Benchmark_Oliveagle_Jsonpath_10Mb_First(b *testing.B) {
-	b.StopTimer()
-	var jdata interface{}
-	largeData := GenerateLargeData()
-	json.Unmarshal(largeData, &jdata)
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = jsonpath.JsonPathLookup(jdata, "$.store.book[0].title")
-	}
-}
-
-func Benchmark_Oliveagle_Jsonpath_10Mb_Last(b *testing.B) {
-	b.StopTimer()
-	var jdata interface{}
-	largeData := GenerateLargeData()
-	json.Unmarshal(largeData, &jdata)
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = jsonpath.JsonPathLookup(jdata, "$.store.book[100000].title")
-	}
-}
-*/
 func Benchmark_Jsonslice_Get_10Mb_First(b *testing.B) {
 	b.StopTimer()
 	largeData := GenerateLargeData()

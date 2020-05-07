@@ -157,9 +157,8 @@ $ go test -bench=. -benchmem -benchtime=4s
 goos: linux
 goarch: amd64
 pkg: github.com/bhmj/jsonslice
-++ here's a couple of operations usually needed to get an object by jsonpath (for reference):
+++ usually you need to unmarshal the whole JSON to get an object by jsonpath (for reference):
 Benchmark_Unmarshal-4                     500000             14712 ns/op            4368 B/op        130 allocs/op
-Benchmark_Oliveagle_Jsonpath-4           5000000              1560 ns/op             496 B/op         27 allocs/op
 ++ and here's a jsonslice.Get:
 Benchmark_Jsonslice_Get_Simple-4         2000000              3878 ns/op             128 B/op          4 allocs/op
 ++ Get() involves parsing a jsonpath, here it is:
@@ -179,7 +178,9 @@ ok      github.com/bhmj/jsonslice       83.152s
 
 ## Changelog
 
-**1.0.3** (2019-12-24) -- bugfix: `$[0].foo` `[{"foo":"\\"}]` generated "unexpected end of input"
+**1.0.4** (2020-05-07) -- bugfix: `$*` path generated panic.
+
+**1.0.3** (2019-12-24) -- bugfix: `$[0].foo` `[{"foo":"\\"}]` generated "unexpected end of input".
 
 **1.0.2** (2019-12-07) -- nested aggregation (`$[:].['a','b']`) now works as expected. TODO: add option to switch nested aggregation mode at runtime!
 

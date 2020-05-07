@@ -154,7 +154,6 @@ func Get(input []byte, path string) ([]byte, error) {
 
 	n := node
 	for {
-		n = n.Next
 		if n == nil {
 			break
 		}
@@ -171,6 +170,7 @@ func Get(input []byte, path string) ([]byte, error) {
 				}
 			}
 		}
+		n = n.Next
 	}
 
 	result, err := getValue(input, node, false)
