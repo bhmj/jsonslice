@@ -238,6 +238,7 @@ ok      github.com/bhmj/jsonslice       83.152s
 - [x] deepscan operator (`..`)
 - [x] syntax extensions: `$.'keys with spaces'.price`
 - [x] flexible syntax: `$[0]` works on both `[1,2,3]` and `{"0":"abc"}`
+- [ ] IN (), NOT IN ()
 - [ ] Optionally unmarshal the result
 - [ ] Option to select aggregation mode (nested or plain)
 
