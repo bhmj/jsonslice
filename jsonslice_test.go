@@ -303,14 +303,7 @@ func Test_Expressions(t *testing.T) {
 }
 
 func Test_Extensions(t *testing.T) {
-	// variant1 := []byte(`
-	// 	{
-	// 		"book": [
-	// 			{"Author": "J.R.R.Tolkien", "Title": "Lord of the Rings"},
-	// 			{"Author": "Z.Hopp", "Title": "Trollkrittet"}
-	// 		]
-	// 	}
-	// `)
+
 	variant2 := []byte(`{ "book": [ {"Book one"}, {"Book two"}, {"Book three"}, {"Book four"} ] }`)
 	variant3 := []byte(`{"a": "first", "2": "second", "b": "third"}`)
 	variant4 := []byte(`["first", "second", "third"]`)
@@ -440,8 +433,7 @@ func Test_Extensions(t *testing.T) {
 		{`$.*`, variantI, []byte(`["string",42,{"key":"value"},[0,1]]`)},
 
 		// variations
-
-		{`$..key..[0]`, variantK, []byte(`[[{"baz": ["hello"]}],["eee!", {"key":[{"ouch":2}]}],[{"ouch":2}]]`)},
+		{`$..key..[0]`, variantK, []byte(`[[{"baz": ["hello"]},"hello"],["eee!",{"ouch":2}],[{"ouch":2}]]`)},
 		{`$.a.b[:].['c','d']`, variantL, []byte(`[["cc1","dd1"],["cc2","dd2"]]`)},
 	}
 
@@ -480,6 +472,11 @@ func Test_Fixes(t *testing.T) {
 		// $+ is obviously invalid but acts as simple $ now
 		// fixed in 1.0.4
 		{[]byte(`[{"foo":"bar"}]`), `$+`, []byte(`[{"foo":"bar"}]`)},
+		// https://github.com/bhmj/jsonslice/issues/15
+		// "$..many.keys" used to trigger on "many" without recursing deeper on "keys"
+		// fixed in 1.0.5
+		{[]byte(`{"kind":"Pod", "spec":{ "containers": [{"name":"c1"}, {"name":"c2"}] }}`), `$.spec.containers[:]`, []byte(`[{"name":"c1"},{"name":"c2"}]`)},
+		{[]byte(`{"kind":"Pod", "spec":{ "containers": [{"name":"c1"}, {"name":"c2"}] }}`), `$..spec.containers[:]`, []byte(`[[{"name":"c1"},{"name":"c2"}]]`)},
 	}
 
 	for _, tst := range tests {
