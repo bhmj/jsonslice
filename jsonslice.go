@@ -891,29 +891,13 @@ func subSlice(input []byte, nod *tNode, elems []tElem, i int, res []byte, inside
 	return res, nil
 }
 
-/*
-	input:
-	 - key		= key that has been found
-	 - input	= input[i]
-	 - i		= points at value
-	 - nod		= current node
-	 - elems	=
-	return:
-	 - elems    = multikey or wild
-	 - res	    = single key or deep
-	 - i        =
-	 - error    =
-*/
+// Check for key match (or wildscan)
+// "key" has been found earlier in input json
+// If match then get value, if not match then skip value
+// return "res" with a value and "i" pointing after the value
+//
 func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, res []byte, inside bool) ([][]byte, []byte, int, error) {
-	// var s, e int
 	var err error
-	// var val []byte
-
-	// s, e, i, err = valuate(input, i) // s:e holds a value
-	// if err != nil {
-	// 	return elems, res, i, err
-	// }
-	// val = input[s:e]
 
 	i, err = skipSpaces(input, i)
 	if err != nil {
@@ -981,7 +965,10 @@ func processKey(
 				return elems, res, i, err
 			}
 			if match {
-				res = plus(res, input[i:e:e])
+				sub, err = getValue(input[i:e:e], nod.Next, inside || nod.Type&cWild > 0)
+				if len(sub) > 0 {
+					res = plus(res, sub)
+				}
 			}
 			deep, err = getValue(input[i:e:e], nod, true) // deepscan
 			if len(deep) > 0 {
@@ -1032,6 +1019,11 @@ func matchKeys(key []byte, nodkey []byte) bool {
 	return a == la && b == lb
 }
 
+// get current value from input
+// returns
+//   s = start of value
+//   e = end of value
+//   i = next item
 func valuate(input []byte, i int) (int, int, int, error) {
 	var err error
 	var s int
