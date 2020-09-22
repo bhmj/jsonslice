@@ -178,6 +178,8 @@ ok      github.com/bhmj/jsonslice       83.152s
 
 ## Changelog
 
+**1.0.5** (2020-09-22) -- bugfix: `$..many.keys` used to trigger on `many` without recursing deeper on `keys`.
+
 **1.0.4** (2020-05-07) -- bugfix: `$*` path generated panic.
 
 **1.0.3** (2019-12-24) -- bugfix: `$[0].foo` `[{"foo":"\\"}]` generated "unexpected end of input".
