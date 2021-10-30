@@ -90,14 +90,14 @@ func init() {
 type word []byte
 
 const (
-	cDot      = 1 << iota // common [dot-]node
-	cAgg      = 1 << iota // aggregating
-	cFunction = 1 << iota // function
-	cSlice    = 1 << iota // slice array [x:y:s]
-	cFullScan = 1 << iota // array slice: need fullscan
-	cFilter   = 1 << iota // filter
-	cWild     = 1 << iota // wildcard (*)
-	cDeep     = 1 << iota // deepscan (..)
+	cDot      = 1 << iota // 1 common [dot-]node
+	cAgg      = 1 << iota // 2 aggregating
+	cFunction = 1 << iota // 4 function
+	cSlice    = 1 << iota // 8 slice array [x:y:s]
+	cFullScan = 1 << iota // 16 array slice: need fullscan
+	cFilter   = 1 << iota // 32 filter
+	cWild     = 1 << iota // 64 wildcard (*)
+	cDeep     = 1 << iota // 128 deepscan (..)
 
 	cRoot = 1 << iota // key is referred from root
 
@@ -483,6 +483,8 @@ func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
 	return true, i + 2, nil
 }
 
+// returns value specified by nod or nil if no match
+// 'inside' specifies recursive mode
 func getValue(input []byte, nod *tNode, inside bool) (result []byte, err error) {
 
 	if len(input) == 0 {
@@ -960,6 +962,22 @@ func processKey(
 				elems = append(elems, sub)
 			}
 		} else { // deep: $..a  $..[a,b]
+			/*
+				if len(nod.Keys) == 1 {
+					// $.a  $.a.x
+					res, err = getValue(input[i:], nod.Next, inside || nod.Type&cWild > 0) // recurse
+					return elems, res, i, err
+				}
+				// $[a,b]  $[a,b].x  $.*
+				e, err = skipValue(input, i)
+				if err != nil {
+					return elems, res, i, err
+				}
+				sub, err = getValue(input[i:e], nod.Next, inside || nod.Type&cWild > 0)
+				if len(sub) > 0 {
+					elems = append(elems, sub)
+				}
+			*/
 			e, err = skipValue(input, i)
 			if err != nil {
 				return elems, res, i, err

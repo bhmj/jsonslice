@@ -12,6 +12,7 @@ import (
 
 var data []byte
 var condensed []byte
+var differentTypes []byte
 
 func init() {
 	data = []byte(`
@@ -87,6 +88,39 @@ func init() {
 			},
 			"expensive": 10
 		}
+	`)
+	differentTypes = []byte(`
+		[
+			{"key": "some"},
+			{"key": "value"},
+			{"key": null},
+			{"key": true},
+			{"key": false},
+			{"key": 0},
+			{"key": 1},
+			{"key": -1},
+			{"key": ""},
+			{"key": "0"},
+			{"key": "1"},
+			{"key": {}},
+			{"key": []},
+			{"key": "valuemore"},
+			{"key": "morevalue"},
+			{"key": ["value"]},
+			{"key": {"some": "value"}},
+			{"key": {"key": "value"}},
+			{"some": "value"},
+			{"key": 42},
+			{"key": 41},
+			{"key": 43},
+			{"key": 42.0001},
+			{"key": 41.9999},
+			{"key": "42"},
+			{"key": 420},
+			{"key": [42]},
+			{"key": {"key": 42}},
+			{"key": {"some": 42}}
+	  	]
 	`)
 }
 
@@ -294,6 +328,55 @@ func Test_Expressions(t *testing.T) {
 	for _, tst := range tests {
 		// println(tst.Query)
 		res, err := Get(data, tst.Query)
+		if err != nil {
+			t.Errorf(tst.Query + " : " + err.Error())
+		} else if compareSlices(res, tst.Expected) != 0 {
+			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(res) + "`")
+		}
+	}
+}
+
+func Test_AbstractComparison(t *testing.T) {
+
+	tests := []struct {
+		Query    string
+		Expected []byte
+	}{
+		// abstract integer
+		{`$[?(@.key == 1)]`, []byte(`[{"key": true},{"key": 1},{"key": "1"}]`)},
+		// abstract integer
+		{`$[?(@.key == 0)]`, []byte(`[{"key": false},{"key": 0},{"key": "0"}]`)},
+		// strict integer
+		{`$[?(@.key === 1)]`, []byte(`[{"key": 1}]`)},
+		// strict integer
+		{`$[?(@.key === 0)]`, []byte(`[{"key": 0}]`)},
+		// abstract string
+		{`$[?(@.key == "1")]`, []byte(`[{"key": true},{"key": 1},{"key": "1"}]`)},
+		// abstract string
+		{`$[?(@.key == "0")]`, []byte(`[{"key": false},{"key": 0},{"key": "0"}]`)},
+		// strict string
+		{`$[?(@.key === "0")]`, []byte(`[{"key": "0"}]`)},
+		// abstract boolean
+		{`$[?(@.key == true)]`, []byte(`[{"key": true},{"key": 1},{"key": "1"}]`)},
+		// abstract boolean
+		{`$[?(@.key == false)]`, []byte(`[{"key": false},{"key": 0},{"key": ""},{"key": "0"}]`)},
+		// strict boolean
+		{`$[?(@.key === true)]`, []byte(`[{"key": true}]`)},
+		// strict boolean
+		{`$[?(@.key === false)]`, []byte(`[{"key": false}]`)},
+		// cburgmer's string
+		{`$[?(@.key === "value")]`, []byte(`[{"key": "value"}]`)},
+		// abstract number (int)
+		{`$[?(@.key==42)]`, []byte(`[{"key": 42},{"key": "42"}]`)},
+		// strict number (int)
+		{`$[?(@.key===42)]`, []byte(`[{"key": 42}]`)},
+		// strict number (float)
+		{`$[?(@.key===42.0)]`, []byte(`[{"key": 42}]`)},
+	}
+
+	for _, tst := range tests {
+		// println(tst.Query)
+		res, err := Get(differentTypes, tst.Query)
 		if err != nil {
 			t.Errorf(tst.Query + " : " + err.Error())
 		} else if compareSlices(res, tst.Expected) != 0 {
