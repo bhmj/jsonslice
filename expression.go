@@ -1,6 +1,8 @@
 package jsonslice
 
 import (
+	"bytes"
+	"math"
 	"regexp"
 	"strconv"
 )
@@ -52,8 +54,8 @@ type tOperand struct {
 	Regexp *regexp.Regexp
 }
 
-var operator = [...]string{">=", "<=", "==", "!=~", "!~", "!=", "=~", ">", "<", "&&", "||"}
-var operatorCode = [...]byte{'G', 'L', 'E', 'r', 'r', 'N', 'R', 'g', 'l', '&', '|'}
+var operator = [...]string{">=", "<=", "===", "==", "!=~", "!~", "!=", "=~", ">", "<", "&&", "||"}
+var operatorCode = [...]byte{'G', 'L', 'E', 'e', 'r', 'r', 'N', 'R', 'g', 'l', '&', '|'}
 var operatorPrecedence = map[byte]int{'&': 1, '|': 1, 'g': 2, 'l': 2, 'E': 2, 'N': 2, 'R': 2, 'r': 2, 'G': 2, 'L': 2, '+': 3, '-': 3, '*': 4, '/': 4}
 
 type stack struct {
@@ -180,7 +182,7 @@ func nextToken(path []byte, i int, prevOperator byte) (int, *tToken, error) {
 		if path[i] == 't' || path[i] == 'f' {
 			return readBool(path, i)
 		}
-		return tokComplex(path, i)
+		return tokComplex(path, i) // nolint:staticcheck
 	}
 	return i, tok, nil
 }
@@ -405,7 +407,7 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 	if op == '+' || op == '-' || op == '*' || op == '/' {
 		// arithmetic
 		return opArithmetic(op, left, right)
-	} else if op == 'g' || op == 'l' || op == 'E' || op == 'N' || op == 'G' || op == 'L' || op == 'R' || op == 'r' {
+	} else if bytes.IndexByte([]byte{'g', 'l', 'E', 'e', 'N', 'G', 'L', 'R', 'r'}, op) != -1 {
 		// comparison
 		return opComparison(op, left, right)
 	} else if op == '&' || op == '|' {
@@ -436,47 +438,53 @@ func opArithmetic(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 }
 
 func opComparison(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
-	var res tOperand
+	result := tOperand{Type: cOpBool, Bool: false}
 
-	res.Type = cOpBool
 	if left.Type == cOpNull || right.Type == cOpNull {
-		res.Bool = false
-		return &res, nil
+		result.Bool = (left.Type|right.Type == cOpNull)
+		return &result, nil
 	}
 	if op == 'R' || op == 'r' {
-		if !(left.Type == cOpString && right.Type == cOpRegexp) {
-			return nil, errInvalidRegexp
+		if !(left.Type|right.Type == cOpString|cOpRegexp) {
+			return &result, nil
 		}
-	} else if left.Type != right.Type {
-		return nil, errOperandTypes
 	}
-	switch left.Type {
-	case cOpBool:
-		return opComparisonBool(op, left, right)
-	case cOpNumber:
-		return opComparisonNumber(op, left, right)
-	case cOpString:
+	if op == 'E' && left.Type != right.Type {
+		return &result, nil
+	}
+	comparedTypes := left.Type | right.Type
+
+	if comparedTypes&cOpNumber > 0 {
+		return opComparisonNumber(op, toNumber(left), toNumber(right))
+	}
+	if comparedTypes&cOpBool > 0 {
+		return opComparisonBool(op, toBool(left), toBool(right))
+	}
+	if comparedTypes&cOpString > 0 {
 		return opComparisonString(op, left, right)
 	}
-	return &res, nil
+	return &result, nil
 }
 
 func opComparisonBool(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
-	var res tOperand
+	res := tOperand{Type: cOpBool}
 
-	res.Type = cOpBool
+	if left.Type|right.Type != cOpBool {
+		return &res, nil
+	}
 	switch op {
 	case 'g':
 		res.Bool = (left.Bool && !right.Bool)
 	case 'l':
 		res.Bool = (!left.Bool && right.Bool)
-	case 'E':
+	case 'E', 'e':
 		res.Bool = (left.Bool == right.Bool)
 	case 'N':
 		res.Bool = (left.Bool != right.Bool)
 	case 'G':
+		res.Bool = (left.Bool || !right.Bool)
 	case 'L':
-		res.Bool = right.Bool
+		res.Bool = (!left.Bool || right.Bool)
 	}
 	return &res, nil
 }
@@ -489,7 +497,7 @@ func opComparisonNumber(op byte, left *tOperand, right *tOperand) (*tOperand, er
 		res.Bool = left.Number > right.Number
 	case 'l':
 		res.Bool = left.Number < right.Number
-	case 'E':
+	case 'E', 'e':
 		res.Bool = left.Number == right.Number
 	case 'N':
 		res.Bool = left.Number != right.Number
@@ -505,8 +513,16 @@ func opComparisonString(op byte, left *tOperand, right *tOperand) (*tOperand, er
 	var res tOperand
 	res.Type = cOpBool
 	switch op {
-	case 'E':
+	case 'E', 'e':
 		res.Bool = compareSlices(left.Str, right.Str) == 0
+	case 'g':
+		res.Bool = compareSlices(left.Str, right.Str) > 0
+	case 'l':
+		res.Bool = compareSlices(left.Str, right.Str) < 0
+	case 'G':
+		res.Bool = compareSlices(left.Str, right.Str) >= 0
+	case 'L':
+		res.Bool = compareSlices(left.Str, right.Str) <= 0
 	case 'N':
 		res.Bool = compareSlices(left.Str, right.Str) != 0
 	case 'R':
@@ -517,6 +533,45 @@ func opComparisonString(op byte, left *tOperand, right *tOperand) (*tOperand, er
 		return left, errInvalidOperatorStrings
 	}
 	return &res, nil
+}
+
+func toNumber(op *tOperand) *tOperand {
+	result := *op
+	result.Type = cOpNumber
+
+	switch op.Type {
+	case cOpBool:
+		if op.Bool {
+			result.Number = 1
+		} else {
+			result.Number = 0
+		}
+	case cOpString:
+		var err error
+		result.Number, err = strconv.ParseFloat(string(op.Str), 64)
+		if err != nil {
+			result.Number = math.NaN()
+		}
+	case cOpRegexp:
+		result.Number = math.NaN()
+	}
+	return &result
+}
+
+func toBool(op *tOperand) *tOperand {
+	result := *op
+	switch op.Type {
+	case cOpString:
+		result.Type = cOpBool
+		if len(op.Str) == 0 || compareSlices(op.Str, []byte{'0'}) == 0 {
+			result.Bool = false
+		} else if compareSlices(op.Str, []byte{'1'}) == 0 {
+			result.Bool = true
+		} else {
+			result.Type = cOpNone
+		}
+	}
+	return &result
 }
 
 func opLogic(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
@@ -553,13 +608,20 @@ func opLogic(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 }
 
 func compareSlices(s1 []byte, s2 []byte) int {
-	if len(s1) != len(s2) {
-		return len(s1) - len(s2)
+	if len(s1)+len(s2) == 0 {
+		return 0
 	}
-	for i := range s1 {
-		if s1[i] != s2[i] {
-			return int(s1[i] - s2[i])
+	i := 0
+	for i = 0; i < len(s1); i++ {
+		if i > len(s2)-1 {
+			return 1
 		}
+		if s1[i] != s2[i] {
+			return int(s1[i]) - int(s2[i])
+		}
+	}
+	if i < len(s2) {
+		return -1
 	}
 	return 0
 }

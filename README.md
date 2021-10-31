@@ -126,7 +126,8 @@ If `step` is negative:
 
   Operator | Description
   --- | ---
-  `==`  | Equal to<br>Use single or double quotes for string expressions.<br>`[?(@.color=='red')]` or `[?(@.color=="red")]`
+  `===`  | Strict equality (mimics JavaScript). Examples: `true===true, 42===42`
+  `==`  | Abstract equality (mimics JavaScript). Examples: `true=="1", 42=="42"`. <br>Use single or double quotes for string expressions.<br>`[?(@.color=='red')]` or `[?(@.color=="red")]`
   `!=`  | Not equal to<br>`[?(@.author != "Herman Melville")]`
   `>`   | Greater than<br>`[?(@.price > 10)]`
   `>=`  | Greater than or equal to
@@ -177,6 +178,8 @@ ok      github.com/bhmj/jsonslice       83.152s
 ```
 
 ## Changelog
+
+**1.0.6** (2021-10-31) -- JS-like behaviour on string/number/boolean values comparison. `===` operator added for strict comparison. Strings are now comparable.
 
 **1.0.5** (2020-09-22) -- bugfix: `$..many.keys` used to trigger on `many` without recursing deeper on `keys`.
 

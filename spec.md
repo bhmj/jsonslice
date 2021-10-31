@@ -26,8 +26,8 @@ path | input 1 | result 1<br>explanation | input 2 | result 2<br>explanation
 `$.2` or `$.'2'` | `["a","b","c"]` | <span style="color:#DD4444">dot notation is not applicable for array</span> |  `{ "1":"a", "2":"b" }` | `"b"`<br>object key by name
 `$['2']` | `["a","b","c"]` | <span style="color:#DD4444">not applicable:<br>non-integer index</span> |  `{ "1":"a", "2":"b" }` | `"b"`<br>object key by name
 `$['1','2']` | `["a","b","c"]` | <span style="color:#DD4444">not applicable:<br>non-integer indexes</span> |  `{"1":"a", "2":"b"}}` | `["a","b"]`<br>aggregate values of keys by name
-`$[1,2]` | `["a","b","c"]` | `["b","c"]`<br>aggregate array elements by index |  `{"1":"a", "2":"b"}}` | `["a","b"]`<br>aggregate values of keys by name
-`$[*]`  | `["a","b","c"]` | `["a","b","c"]`<br>all elements of an array |  `{ "1":"a", "2":"b" }` | `["a", "b"]`<br>values of all the keys (aggregation)
+`$[1,2]` | `["a","b","c"]` | `["b","c"]`<br>aggregate array elements by index |  `{"1":"a", "2":"b"}}` | `["a","b"]`<br>aggregate values of keys by name (or <span style="color:#DD4444">error</span>???)
+`$[*]` <span style="color:#DD4444">is it even possible? maybe just for compatibility</span>  | `["a","b","c"]` | `["a","b","c"]`<br>all elements of an array |  `{ "1":"a", "2":"b" }` | `["a", "b"]`<br>values of all the keys (aggregation)
 `$.*`  | `["a","b","c"]` | <span style="color:#DD4444">dot notation is not applicable for array</span> |  `{ "1":"a", "2":"b" }` | `["a", "b"]`<br>values of all the keys (aggregation)
 
 ### Schema
