@@ -7,8 +7,20 @@ PREFIX ?= manual
 
 all: configure build lint test
 
+help:
+	echo "usage: make <command>"
+	echo ""
+	echo "  <command> is"
+	echo ""
+	echo "    configure     - install tools and dependencies"
+	echo "    build         - build jsonslice CLI"
+	echo "    run           - run jsonslice CLI"
+	echo "    lint          - run linters"
+	echo "    test          - run tests"
+
 configure:
 	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 build:
 	mkdir -p $(OUT)
@@ -20,11 +32,11 @@ run:
 
 lint:
 	golangci-lint run
-	gocyclo
+	gocyclo -over 18 .
 
 test: 
 	go test ./...
 
-.PHONY: all build run lint test
+.PHONY: all configure help build run lint test
 
 $(V).SILENT:

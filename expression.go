@@ -1,6 +1,7 @@
 package jsonslice
 
 import (
+	"bytes"
 	"math"
 	"regexp"
 	"strconv"
@@ -181,7 +182,7 @@ func nextToken(path []byte, i int, prevOperator byte) (int, *tToken, error) {
 		if path[i] == 't' || path[i] == 'f' {
 			return readBool(path, i)
 		}
-		return tokComplex(path, i)
+		return tokComplex(path, i) // nolint:staticcheck
 	}
 	return i, tok, nil
 }
@@ -406,7 +407,7 @@ func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
 	if op == '+' || op == '-' || op == '*' || op == '/' {
 		// arithmetic
 		return opArithmetic(op, left, right)
-	} else if op == 'g' || op == 'l' || op == 'E' || op == 'e' || op == 'N' || op == 'G' || op == 'L' || op == 'R' || op == 'r' {
+	} else if bytes.IndexByte([]byte{'g', 'l', 'E', 'e', 'N', 'G', 'L', 'R', 'r'}, op) != -1 {
 		// comparison
 		return opComparison(op, left, right)
 	} else if op == '&' || op == '|' {
@@ -616,7 +617,7 @@ func compareSlices(s1 []byte, s2 []byte) int {
 			return 1
 		}
 		if s1[i] != s2[i] {
-			return int(s1[i] - s2[i])
+			return int(s1[i]) - int(s2[i])
 		}
 	}
 	if i < len(s2) {

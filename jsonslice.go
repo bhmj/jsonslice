@@ -39,8 +39,6 @@ var (
 	errNotEnoughArguments,
 	errUnknownOperator,
 	errInvalidArithmetic,
-	errInvalidRegexp,
-	errOperandTypes,
 	errInvalidOperatorStrings error
 )
 
@@ -82,8 +80,6 @@ func init() {
 	errNotEnoughArguments = errors.New("not enough arguments")
 	errUnknownOperator = errors.New("unknown operator")
 	errInvalidArithmetic = errors.New("invalid operands for arithmetic operator")
-	errInvalidRegexp = errors.New("invalid operands for regexp match")
-	errOperandTypes = errors.New("operand types do not match")
 	errInvalidOperatorStrings = errors.New("operator is not applicable to strings")
 }
 
@@ -130,8 +126,8 @@ func getEmptyNode() *tNode {
 
 // Get returns a part of input, matching jsonpath.
 // In terms of allocations there are two cases of retreiving data from the input:
-// 1. (simple case) the result is a simple subslice of a source input.
-// 2. the result is a merge of several non-contiguous parts of input. More allocations are needed.
+//   1) simple case: the result is a simple subslice of a source input.
+//   2) the result is a merge of several non-contiguous parts of input. More allocations are needed.
 func Get(input []byte, path string) ([]byte, error) {
 
 	if len(path) == 0 {
@@ -165,7 +161,7 @@ func Get(input []byte, path string) ([]byte, error) {
 						// not found or other error
 						tok.Operand.Type = cOpNull
 					}
-					decodeValue(val, tok.Operand)
+					_ = decodeValue(val, tok.Operand)
 					tok.Operand.Node = nil
 				}
 			}
@@ -235,7 +231,7 @@ func readRef(path []byte, i int, uptype int) (*tNode, int, error) {
 		return nil, i, errPathInvalidChar
 	}
 	// single key
-	key, nod.Slice[0], sep, i, flags, err = readKey(path, i)
+	key, nod.Slice[0], sep, i, flags, _ = readKey(path, i)
 	if len(key) > 0 {
 		nod.Keys = append(nod.Keys, key)
 	}
@@ -311,7 +307,7 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 	l := len(path)
 	s := i
-	e := i
+	var e int
 	if i == l {
 		return nil, 0, 0, i, 0, errPathUnexpectedEnd
 	}
@@ -885,7 +881,7 @@ func subSlice(input []byte, nod *tNode, elems []tElem, i int, res []byte, inside
 		}
 	}
 	if nod.Type&cDeep > 0 {
-		sub, err = getValue(input[elems[i].start:elems[i].end], nod, true) // deepscan
+		sub, _ = getValue(input[elems[i].start:elems[i].end], nod, true) // deepscan
 		if len(sub) > 0 {
 			res = plus(res, sub)
 		}
@@ -983,7 +979,7 @@ func processKey(
 				return elems, res, i, err
 			}
 			if match {
-				sub, err = getValue(input[i:e:e], nod.Next, inside || nod.Type&cWild > 0)
+				sub, _ = getValue(input[i:e:e], nod.Next, inside || nod.Type&cWild > 0)
 				if len(sub) > 0 {
 					res = plus(res, sub)
 				}

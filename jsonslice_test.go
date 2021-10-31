@@ -154,7 +154,7 @@ func TestFuzzyPath(t *testing.T) {
 		n := rand.Intn(len(b)) + 1
 		b[0] = '$'
 		str = string(b[:n])
-		readRef([]byte(str), 1, 0)
+		_, _, _ = readRef([]byte(str), 1, 0)
 	}
 	fmt.Println()
 }
@@ -163,7 +163,7 @@ func TestCustomPath(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
-	readRef([]byte("$.()"), 1, 0)
+	_, _, _ = readRef([]byte("$.()"), 1, 0)
 }
 
 func TestFuzzyGet(t *testing.T) {
@@ -191,7 +191,7 @@ func TestFuzzyGet(t *testing.T) {
 			t.Fatal(err)
 		}
 		str = string(b[:n])
-		Get([]byte(str), "$.some.value")
+		_, _ = Get([]byte(str), "$.some.value")
 	}
 	fmt.Println()
 }
@@ -377,6 +377,34 @@ func Test_AbstractComparison(t *testing.T) {
 	for _, tst := range tests {
 		// println(tst.Query)
 		res, err := Get(differentTypes, tst.Query)
+		if err != nil {
+			t.Errorf(tst.Query + " : " + err.Error())
+		} else if compareSlices(res, tst.Expected) != 0 {
+			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(res) + "`")
+		}
+	}
+}
+
+func Test_StringComparison(t *testing.T) {
+
+	tests := []struct {
+		Data     []byte
+		Query    string
+		Expected []byte
+	}{
+		// string comparison
+		{[]byte(`{"foo":[{"key":"moo"}]}`), `$.foo[?(@.key > "zzz")]`, []byte(`[]`)},
+		// string comparison
+		{[]byte(`{"foo":[{"key":"moo"}]}`), `$.foo[?(@.key > "abc")]`, []byte(`[{"key":"moo"}]`)},
+		// string comparison
+		{[]byte(`{"foo":[{"key":"12"}]}`), `$.foo[?(@.key > "2")]`, []byte(`[]`)},
+		// string and number comparison
+		{[]byte(`{"foo":[{"key":"12"}]}`), `$.foo[?(@.key > 2)]`, []byte(`[{"key":"12"}]`)},
+	}
+
+	for _, tst := range tests {
+		// println(tst.Query)
+		res, err := Get(tst.Data, tst.Query)
 		if err != nil {
 			t.Errorf(tst.Query + " : " + err.Error())
 		} else if compareSlices(res, tst.Expected) != 0 {
@@ -633,8 +661,6 @@ func Test_Errors(t *testing.T) {
 		// invalid json
 		{[]byte(`{"foo" - { "bar": 0 }}`), `$.foo.bar`, `':' expected`, []byte{}},
 
-		// invalid string operator
-		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar > "zzz")]`, `operator is not applicable to strings`, []byte{}},
 		// unknown token
 		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar == 2^3)]`, `unknown token at 16`, []byte{}},
 
@@ -666,7 +692,7 @@ func Test_Errors(t *testing.T) {
 func Benchmark_Unmarshal(b *testing.B) {
 	var jdata interface{}
 	for i := 0; i < b.N; i++ {
-		json.Unmarshal(data, &jdata)
+		_ = json.Unmarshal(data, &jdata)
 	}
 }
 
@@ -726,7 +752,7 @@ func Benchmark_Unmarshal_10Mb(b *testing.B) {
 	largeData := GenerateLargeData()
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		json.Unmarshal(largeData, &jdata)
+		_ = json.Unmarshal(largeData, &jdata)
 	}
 }
 
