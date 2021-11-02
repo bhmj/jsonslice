@@ -138,6 +138,12 @@ If `step` is negative:
   `&&`  | Logical AND<br>`[?(@.price < 10 && @isbn)]`
   `\|\|`  | Logical OR<br>`[?(@.price > 10 \|\| @.category == 'reference')]`
 
+#### Comparison details
+ When one side of comparison is a | then other side is converted to it
+--- | ---
+number | true -> 1<br/>false -> 0<br/>"1" -> 1<br/>"a" -> NaN
+bool | "" -> false<br/>"0" -> false<br/>"1" -> true<br/>"a" -> undefined
+
 ## Examples
 
 Assuming `sample0.json` and `sample1.json` in the example directory:  

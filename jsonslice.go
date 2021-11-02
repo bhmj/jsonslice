@@ -263,6 +263,7 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 	)
 	l := len(path)
 	if i < l-1 && path[i] == '?' && path[i+1] == '(' {
+		// ?(...): filter
 		return readFilter(path, i+2, nod)
 	}
 	for pos := 0; i < l && path[i] != ']'; pos++ {
@@ -1068,12 +1069,12 @@ type tElem struct {
 	end   int
 }
 
-// always moving from start to end
-// step sets the direction
-// start bound always included
-// non-empty end bound always excluded
+// always moving from start to end;
+// step sets the direction;
+// start bound always included;
+// non-empty end bound always excluded;
 //
-// empty bound rules
+// empty bound rules:
 //   positive step:
 //     empty start = 0
 //     empty end = last item (included)
