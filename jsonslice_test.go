@@ -268,7 +268,7 @@ func Test_Expressions(t *testing.T) {
 		// logic operators : AND
 		{`$.store.book[?(@.price > $.expensive && @.isbn)].title`, []byte(`["The Lord of the Rings"]`)},
 		// logic operators : OR
-		{`$.store.book[?(@.price >= $.expensive || @.isbn)].title`, []byte(`["Moby Dick","The Lord of the Rings"]`)},
+		{`$.store.book[?(@.price >= $.expensive || @.isbn)].title`, []byte(`["Sword of Honour","Moby Dick","The Lord of the Rings"]`)},
 		// logic operators : AND/OR numbers, strings
 		{`$.store.book[?(@.price || @.isbn != "")].title`, []byte(`["Sayings of the Century","Sword of Honour","Moby Dick","The Lord of the Rings"]`)},
 		// logic operators : same as above, for coverage's sake
@@ -345,7 +345,7 @@ func Test_AbstractComparison(t *testing.T) {
 		// abstract integer
 		{`$[?(@.key == 1)]`, []byte(`[{"key": true},{"key": 1},{"key": "1"}]`)},
 		// abstract integer
-		{`$[?(@.key == 0)]`, []byte(`[{"key": false},{"key": 0},{"key": "0"}]`)},
+		{`$[?(@.key == 0)]`, []byte(`[{"key": false},{"key": 0},{"key": ""},{"key": "0"}]`)},
 		// strict integer
 		{`$[?(@.key === 1)]`, []byte(`[{"key": 1}]`)},
 		// strict integer
@@ -662,7 +662,7 @@ func Test_Errors(t *testing.T) {
 		{[]byte(`{"foo" - { "bar": 0 }}`), `$.foo.bar`, `':' expected`, []byte{}},
 
 		// unknown token
-		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar == 2^3)]`, `unknown token at 16`, []byte{}},
+		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.foo[?(@.bar == 2#3)]`, `unknown token at 8: #3 at 8`, []byte{}},
 
 		// empty key
 		{[]byte(`{"foo":[{"bar":"moo"}]}`), `$.['']`, `empty key`, []byte{}},
@@ -772,4 +772,25 @@ func Benchmark_Jsonslice_Get_10Mb_Last(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = Get(largeData, "$.store.book[100000].title")
 	}
+}
+
+// helpers
+
+func compareSlices(s1 []byte, s2 []byte) int {
+	if len(s1)+len(s2) == 0 {
+		return 0
+	}
+	i := 0
+	for i = 0; i < len(s1); i++ {
+		if i > len(s2)-1 {
+			return 1
+		}
+		if s1[i] != s2[i] {
+			return int(s1[i]) - int(s2[i])
+		}
+	}
+	if i < len(s2) {
+		return -1
+	}
+	return 0
 }

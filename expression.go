@@ -1,365 +1,94 @@
 package jsonslice
 
 import (
-	"bytes"
-	"math"
-	"regexp"
 	"strconv"
+
+	"github.com/bhmj/xpression"
 )
 
-const (
-	cOpNone   = 1 << iota
-	cOpNumber = 1 << iota
-	cOpString = 1 << iota
-	cOpBool   = 1 << iota
-	cOpNull   = 1 << iota
-	cOpRegexp = 1 << iota
-)
-
-/*
-var operatorFn map[byte]
-
-func init() {
-	setupOperatorMap()
-}
-*/
-
-/*
-  <operand> [ <operator> <operand> ] [ <compare> <operand> [ <operator> <operand> ] ]
-
-  <filter> : <expression> [ <operator> <expression> ]   <--- .single
-  <expression> : <operand> [ <operator> <operand> ]
-  <compare> : /(==)|(!=)|(>)|(<)|(>=)|(<=)/
-  <operand> : <number> | <string> | <bool> | <jsonpath>
-  <number> : /-?[0-9]+(\.[0-9]*?)?((E|e)[0-9]+)?/
-  <string> : /"[^"]*"/
-  <bool> : /(true)|(false)/
-  <jsonpath> : /[@$].+/           <--- .exists
-  <operator> : /[+-/*] | (>=,<=,==,!=,>,<) | (&&,||)/
-*/
-
-type tFilter struct {
-	toks []*tToken
-}
-type tToken struct {
-	Operand  *tOperand
-	Operator byte
-}
-type tOperand struct {
-	Type   int // cOp*
-	Number float64
-	Bool   bool
-	Str    []byte
-	Node   *tNode
-	Regexp *regexp.Regexp
-}
-
-var operator = [...]string{">=", "<=", "===", "==", "!=~", "!~", "!=", "=~", ">", "<", "&&", "||"}
-var operatorCode = [...]byte{'G', 'L', 'E', 'e', 'r', 'r', 'N', 'R', 'g', 'l', '&', '|'}
-var operatorPrecedence = map[byte]int{'&': 1, '|': 1, 'g': 2, 'l': 2, 'E': 2, 'N': 2, 'R': 2, 'r': 2, 'G': 2, 'L': 2, '+': 3, '-': 3, '*': 4, '/': 4}
-
-type stack struct {
-	s []*tToken
-}
-
-func reverse(s []*tToken) []*tToken {
-	l := len(s)
-	for i := 0; i < l/2; i++ {
-		s[i], s[l-i-1] = s[l-i-1], s[i]
-	}
-	return s
-}
-
-func (s *stack) push(tok *tToken) {
-	s.s = append(s.s, tok)
-}
-func (s *stack) pop() *tToken {
-	l := len(s.s)
-	if l == 0 {
-		return nil
-	}
-	v := (s.s)[l-1]
-	s.s = (s.s)[:l-1]
-	return v
-}
-func (s *stack) peek() (tok *tToken) {
-	l := len(s.s)
-	if l == 0 {
-		return nil
-	}
-	return (s.s)[l-1]
-}
-func (s *stack) get() []*tToken {
-	return s.s
-}
-
+// readFilter reads expression in ?( ... ) filter, parses tokens and writes result to nod.Filter
 func readFilter(path []byte, i int, nod *tNode) (int, error) {
-	l := len(path)
-
-	// lexer
-	tokens := make([]*tToken, 0)
-	var tok *tToken
-	var err error
-	prevOperator := byte('+')
-	for i < l && path[i] != ')' {
-		i, tok, err = nextToken(path, i, prevOperator)
-		if err != nil {
-			return i, err
-		}
-		if tok != nil {
-			prevOperator = tok.Operator
-			tokens = append(tokens, tok)
-		}
+	e, err := findClosingBracket(path, i)
+	if err != nil {
+		return i, err
 	}
-
-	//parser
-	opStack := new(stack)
-	result := new(stack)
-	for t := len(tokens) - 1; t >= 0; t-- {
-		op := tokens[t]
-		if op.Operand != nil {
-			result.push(op)
-		} else {
-			for {
-				top := opStack.peek()
-				if top != nil && operatorPrecedence[top.Operator] >= operatorPrecedence[op.Operator] {
-					result.push(opStack.pop())
-					continue
-				}
-				break
-			}
-			opStack.push(op)
-		}
+	tokens, err := xpression.Parse(path[i:e])
+	if err != nil {
+		return i, err
 	}
-	for {
-		top := opStack.pop()
-		if top == nil {
-			break
-		}
-		result.push(top)
-	}
-
-	nod.Filter = &tFilter{toks: reverse(result.get())}
+	nod.Filter = tokens
 	nod.Type |= cFilter
 	nod.Type &^= cDot
 
-	if i < l {
-		i++ // ')'
-		if i < l && path[i] == ']' {
-			i++
+	l := len(path)
+	if e < l {
+		e++ // ')'
+		if e < l && path[e] == ']' {
+			e++
 		}
+	}
+	return e, nil
+}
+
+// findClosingBracket returns the position of a closing round bracket (not consumed)
+func findClosingBracket(path []byte, i int) (int, error) {
+	var err error
+	found := false
+	l := len(path)
+	count := 0
+	for i < l {
+		if path[i] == ')' && count == 0 {
+			found = true
+			break
+		} else if path[i] == '"' || path[i] == '\'' {
+			i, err = skipString(path, i)
+			if err != nil {
+				return i, err
+			}
+			continue
+		} else if path[i] == '(' {
+			count++
+		} else if path[i] == ')' {
+			count--
+		}
+		i++
+	}
+	if !found {
+		return i, errUnexpectedStringEnd
 	}
 	return i, nil
 }
 
-// operand = (number, string, node), operator, compare
-func nextToken(path []byte, i int, prevOperator byte) (int, *tToken, error) {
-	var err error
-	var tok *tToken
-	l := len(path)
-	for i < l && path[i] != ')' {
-		i, err = skipSpaces(path, i)
+// filterMatch evaluates previously parsed expression and returns boolean to filter out array elements
+func filterMatch(input []byte, toks []*xpression.Token) (bool, error) {
+	varFunc := func(str []byte) (*xpression.Operand, error) {
+		if str[0] != '@' {
+			return xpression.Undefined(), nil
+		}
+		str[0] = '$'
+		defer func() { str[0] = '@' }()
+		val, err := Get(input, string(str))
+		if val == nil || err != nil {
+			// not found or other error
+			return xpression.Undefined(), nil
+		}
+		op := &xpression.Operand{}
+		err = decodeValue(val, op)
 		if err != nil {
-			return 0, nil, err
+			return xpression.Undefined(), nil
 		}
-		// end of filter
-		if path[i] == ')' {
-			break
-		}
-		// regexp
-		if path[i] == '/' && prevOperator&^('r'-'R') == 'R' {
-			return readRegexp(path, i)
-		}
-		// number
-		if (path[i] >= '0' && path[i] <= '9') || (path[i] == '-' && prevOperator != 0) {
-			return readNumber(path, i)
-		}
-		// string
-		if path[i] == '"' || path[i] == '\'' {
-			return readString(path, i)
-		}
-		// bool
-		if path[i] == 't' || path[i] == 'f' {
-			return readBool(path, i)
-		}
-		return tokComplex(path, i) // nolint:staticcheck
-	}
-	return i, tok, nil
-}
-
-func tokComplex(path []byte, i int) (int, *tToken, error) {
-	l := len(path)
-	// jsonpath node
-	if path[i] == '@' || path[i] == '$' {
-		nod, j, err := readRef(path[i:], 1, 0)
-		if err != nil {
-			return 0, nil, err
-		}
-		if path[i] == '$' {
-			nod.Type |= cRoot
-		}
-		i += j
-		return i, &tToken{Operand: &tOperand{Type: cOpNone, Node: nod}}, nil
-	}
-	// operator
-	if bytein(path[i], []byte{'+', '-', '*', '/'}) {
-		return i + 1, &tToken{Operator: path[i]}, nil
-	}
-	// compare
-	if i >= l-1 {
-		return i, nil, errUnexpectedEOT
-	}
-	for ic, cmp := range operator {
-		if string(path[i:i+len(cmp)]) == cmp {
-			return i + len(cmp), &tToken{Operator: operatorCode[ic]}, nil
-		}
-	}
-	return i, nil, errUnknownToken
-}
-
-func readNumber(path []byte, i int) (int, *tToken, error) {
-	e, err := skipValue(path, i)
-	if err != nil {
-		return e, nil, err
-	}
-	s, err := strconv.ParseFloat(string(path[i:e]), 64)
-	if err != nil {
-		return e, nil, err
-	}
-	return e, &tToken{Operand: &tOperand{Type: cOpNumber, Number: s}}, nil
-}
-
-func readString(path []byte, i int) (int, *tToken, error) {
-	bound := path[i]
-	prev := bound
-	i++ // quote
-	s := i
-	l := len(path)
-	for i < l {
-		ch := path[i]
-		if ch == bound {
-			if prev != '\\' {
-				break
-			}
-		}
-		prev = ch
-		i++
-	}
-	if i == l {
-		return i, nil, errUnexpectedStringEnd
-	}
-	e := i
-	i++ // unquote
-
-	return i, &tToken{Operand: &tOperand{Type: cOpString, Str: path[s:e]}}, nil
-}
-
-func readBool(path []byte, i int) (int, *tToken, error) {
-	s := i
-	l := len(path)
-	t, f := []byte("true\x00\x00"), []byte("false\x00")
-	for i < l && (path[i] == t[i-s] || path[i] == f[i-s]) && (t[i-s] > 0 || f[i-s] > 0) {
-		i++
-	}
-	if i == l || t[i-s] > 0 && f[i-s] > 0 {
-		return i, nil, errInvalidBoolean
+		return op, nil
 	}
 
-	return i, &tToken{Operand: &tOperand{Type: cOpBool, Bool: path[s] == 't'}}, nil
-}
-
-func readRegexp(path []byte, i int) (int, *tToken, error) {
-	l := len(path)
-	prev := byte(0)
-	re := make([]byte, 0, 32)
-	flags := make([]byte, 0, 8)
-	i++
-	for i < l && !(path[i] == '/' && prev != '\\') {
-		prev = path[i]
-		re = append(re, prev)
-		i++
-	}
-	if i < l { // skip trailing '/'
-		i++
-	}
-	flags = append(flags, '(', '?')
-	for i < l && len(flags) < 4 && (path[i] == 'i' || path[i] == 'm' || path[i] == 's' || path[i] == 'U') {
-		flags = append(flags, path[i])
-		i++
-	}
-	flags = append(flags, ')')
-	rex := ""
-	if len(flags) > 3 {
-		rex = string(flags) + string(re)
-	} else {
-		rex = string(re)
-	}
-	reg, err := regexp.Compile(rex)
-	if err != nil {
-		return i, nil, err
-	}
-	return i, &tToken{Operand: &tOperand{Type: cOpRegexp, Regexp: reg}}, nil
-}
-
-// filterMatch
-func filterMatch(input []byte, toks []*tToken) (bool, error) {
-	if len(toks) == 0 {
-		return false, errEmptyFilter
-	}
-	op, _, err := evalToken(input, toks)
+	op, err := xpression.Evaluate(toks, varFunc)
 	if err != nil {
 		return false, err
 	}
-	switch op.Type {
-	case cOpNull:
-		return false, nil
-	case cOpBool:
-		return op.Bool, nil
-	case cOpNumber:
-		return op.Number > 0, nil
-	case cOpString:
-		return len(op.Str) > 0, nil
-	default:
-		return false, nil
-	}
+	return xpression.ToBoolean(op), nil
 }
 
-func evalToken(input []byte, toks []*tToken) (*tOperand, []*tToken, error) {
-	if len(toks) == 0 {
-		return nil, toks, errNotEnoughArguments
-	}
-	tok := toks[0]
-	if tok.Operand != nil {
-		if tok.Operand.Node != nil {
-			val, err := getValue(input, tok.Operand.Node, false)
-			if len(val) == 0 || err != nil {
-				// not found or other error
-				tok.Operand.Type = cOpNull
-				return tok.Operand, toks[1:], nil
-			}
-			return tok.Operand, toks[1:], decodeValue(val, tok.Operand)
-		}
-		return tok.Operand, toks[1:], nil
-	}
-	var (
-		err   error
-		left  *tOperand
-		right *tOperand
-	)
-	left, toks, err = evalToken(input, toks[1:])
-	if err != nil {
-		return nil, toks, err
-	}
-	right, toks, err = evalToken(input, toks)
-	if err != nil {
-		return nil, toks, err
-	}
-
-	op, err := execOperator(tok.Operator, left, right)
-	return op, toks, err
-}
-
-func decodeValue(input []byte, op *tOperand) error {
+// decodeValue determine data type of `input` and write parsed value to `op`
+func decodeValue(input []byte, op *xpression.Operand) error {
 	i, err := skipSpaces(input, 0)
 	if err != nil {
 		return err
@@ -370,7 +99,7 @@ func decodeValue(input []byte, op *tOperand) error {
 	}
 	if bytein(input[i], []byte{'"', '\'', '{', '['}) {
 		// string
-		op.Type = cOpString
+		op.Type = xpression.StringOperand
 		if input[i] == '"' || input[i] == '\'' { // exclude quotes
 			i++
 			e--
@@ -380,248 +109,23 @@ func decodeValue(input []byte, op *tOperand) error {
 		// number
 		f, err := strconv.ParseFloat(string(input[i:e]), 64)
 		if err != nil {
-			op.Type = cOpNone
+			op.Type = xpression.UndefinedOperand
 			return err
 		}
-		op.Type = cOpNumber
+		op.Type = xpression.NumberOperand
 		op.Number = f
 	} else {
-		//
+		// boolean / null (dirty)
 		ch := input[i]
 		if ch >= 'A' && ch <= 'Z' {
 			ch += 'a' - 'A'
 		}
 		if ch == 't' || ch == 'f' {
-			op.Type = cOpBool
+			op.Type = xpression.BooleanOperand
 			op.Bool = ch == 't'
 		} else {
-			op.Type = cOpNull
+			op.Type = xpression.NullOperand
 		}
 	}
 	return nil
-}
-
-func execOperator(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
-	var res tOperand
-
-	if op == '+' || op == '-' || op == '*' || op == '/' {
-		// arithmetic
-		return opArithmetic(op, left, right)
-	} else if bytes.IndexByte([]byte{'g', 'l', 'E', 'e', 'N', 'G', 'L', 'R', 'r'}, op) != -1 {
-		// comparison
-		return opComparison(op, left, right)
-	} else if op == '&' || op == '|' {
-		// logic
-		return opLogic(op, left, right)
-	}
-	return &res, errUnknownOperator
-}
-
-func opArithmetic(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
-	var res tOperand
-
-	if left.Type != cOpNumber || right.Type != cOpNumber {
-		return nil, errInvalidArithmetic
-	}
-	res.Type = left.Type
-	switch op {
-	case '+':
-		res.Number = left.Number + right.Number
-	case '-':
-		res.Number = left.Number - right.Number
-	case '*':
-		res.Number = left.Number * right.Number
-	case '/':
-		res.Number = left.Number / right.Number
-	}
-	return &res, nil
-}
-
-func opComparison(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
-	result := tOperand{Type: cOpBool, Bool: false}
-
-	if left.Type == cOpNull || right.Type == cOpNull {
-		result.Bool = (left.Type|right.Type == cOpNull)
-		return &result, nil
-	}
-	if op == 'R' || op == 'r' {
-		if !(left.Type|right.Type == cOpString|cOpRegexp) {
-			return &result, nil
-		}
-	}
-	if op == 'E' && left.Type != right.Type {
-		return &result, nil
-	}
-	comparedTypes := left.Type | right.Type
-
-	if comparedTypes&cOpNumber > 0 {
-		return opComparisonNumber(op, toNumber(left), toNumber(right))
-	}
-	if comparedTypes&cOpBool > 0 {
-		return opComparisonBool(op, toBool(left), toBool(right))
-	}
-	if comparedTypes&cOpString > 0 {
-		return opComparisonString(op, left, right)
-	}
-	return &result, nil
-}
-
-func opComparisonBool(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
-	res := tOperand{Type: cOpBool}
-
-	if left.Type|right.Type != cOpBool {
-		return &res, nil
-	}
-	switch op {
-	case 'g':
-		res.Bool = (left.Bool && !right.Bool)
-	case 'l':
-		res.Bool = (!left.Bool && right.Bool)
-	case 'E', 'e':
-		res.Bool = (left.Bool == right.Bool)
-	case 'N':
-		res.Bool = (left.Bool != right.Bool)
-	case 'G':
-		res.Bool = (left.Bool || !right.Bool)
-	case 'L':
-		res.Bool = (!left.Bool || right.Bool)
-	}
-	return &res, nil
-}
-
-func opComparisonNumber(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
-	var res tOperand
-	res.Type = cOpBool
-	switch op {
-	case 'g':
-		res.Bool = left.Number > right.Number
-	case 'l':
-		res.Bool = left.Number < right.Number
-	case 'E', 'e':
-		res.Bool = left.Number == right.Number
-	case 'N':
-		res.Bool = left.Number != right.Number
-	case 'G':
-		res.Bool = left.Number >= right.Number
-	case 'L':
-		res.Bool = left.Number <= right.Number
-	}
-	return &res, nil
-}
-
-func opComparisonString(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
-	var res tOperand
-	res.Type = cOpBool
-	switch op {
-	case 'E', 'e':
-		res.Bool = compareSlices(left.Str, right.Str) == 0
-	case 'g':
-		res.Bool = compareSlices(left.Str, right.Str) > 0
-	case 'l':
-		res.Bool = compareSlices(left.Str, right.Str) < 0
-	case 'G':
-		res.Bool = compareSlices(left.Str, right.Str) >= 0
-	case 'L':
-		res.Bool = compareSlices(left.Str, right.Str) <= 0
-	case 'N':
-		res.Bool = compareSlices(left.Str, right.Str) != 0
-	case 'R':
-		res.Bool = right.Regexp.MatchString(string(left.Str))
-	case 'r':
-		res.Bool = !right.Regexp.MatchString(string(left.Str))
-	default:
-		return left, errInvalidOperatorStrings
-	}
-	return &res, nil
-}
-
-func toNumber(op *tOperand) *tOperand {
-	result := *op
-	result.Type = cOpNumber
-
-	switch op.Type {
-	case cOpBool:
-		if op.Bool {
-			result.Number = 1
-		} else {
-			result.Number = 0
-		}
-	case cOpString:
-		var err error
-		result.Number, err = strconv.ParseFloat(string(op.Str), 64)
-		if err != nil {
-			result.Number = math.NaN()
-		}
-	case cOpRegexp:
-		result.Number = math.NaN()
-	}
-	return &result
-}
-
-func toBool(op *tOperand) *tOperand {
-	result := *op
-	switch op.Type {
-	case cOpString:
-		result.Type = cOpBool
-		if len(op.Str) == 0 || compareSlices(op.Str, []byte{'0'}) == 0 {
-			result.Bool = false
-		} else if compareSlices(op.Str, []byte{'1'}) == 0 {
-			result.Bool = true
-		} else {
-			result.Type = cOpNone
-		}
-	}
-	return &result
-}
-
-func opLogic(op byte, left *tOperand, right *tOperand) (*tOperand, error) {
-	var res tOperand
-	res.Type = cOpBool
-	if left.Type == cOpNull || right.Type == cOpNull {
-		res.Bool = false
-		return &res, nil
-	}
-	l := false
-	r := false
-	switch left.Type {
-	case cOpBool:
-		l = left.Bool
-	case cOpNumber:
-		l = left.Number != 0
-	case cOpString:
-		l = len(left.Str) > 0
-	}
-	switch right.Type {
-	case cOpBool:
-		r = right.Bool
-	case cOpNumber:
-		r = right.Number != 0
-	case cOpString:
-		r = len(right.Str) > 0
-	}
-	if op == '&' {
-		res.Bool = l && r
-	} else {
-		res.Bool = l || r
-	}
-	return &res, nil
-}
-
-func compareSlices(s1 []byte, s2 []byte) int {
-	if len(s1)+len(s2) == 0 {
-		return 0
-	}
-	i := 0
-	for i = 0; i < len(s1); i++ {
-		if i > len(s2)-1 {
-			return 1
-		}
-		if s1[i] != s2[i] {
-			return int(s1[i]) - int(s2[i])
-		}
-	}
-	if i < len(s2) {
-		return -1
-	}
-	return 0
 }

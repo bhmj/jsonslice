@@ -1,8 +1,8 @@
 package jsonslice
 
 /**
-  JsonSlice 1.0.1
-  Michael Gurov, 2018-2019
+  JsonSlice 1.1.0
+  By Michael Gurov, 2018-2021
   MIT licenced
 
   Slice a part of a raw json ([]byte) using jsonpath, without unmarshalling the whole thing.
@@ -15,6 +15,8 @@ import (
 	"errors"
 	"strconv"
 	"sync"
+
+	"github.com/bhmj/xpression"
 )
 
 var (
@@ -108,7 +110,7 @@ type tNode struct {
 	Slice  [3]int
 	Elems  []int
 	Next   *tNode
-	Filter *tFilter
+	Filter []*xpression.Token
 }
 
 func getEmptyNode() *tNode {
@@ -154,15 +156,15 @@ func Get(input []byte, path string) ([]byte, error) {
 			break
 		}
 		if n.Filter != nil {
-			for _, tok := range n.Filter.toks {
-				if tok.Operand != nil && tok.Operand.Node != nil && tok.Operand.Node.Type&cRoot > 0 {
-					val, err := getValue(input, tok.Operand.Node, false)
+			for _, tok := range n.Filter {
+				if tok.Type == xpression.VariableOperand && tok.Operand.Str[0] == '$' {
+					val, err := Get(input, string(tok.Operand.Str))
 					if err != nil {
 						// not found or other error
-						tok.Operand.Type = cOpNull
+						tok.Type = xpression.UndefinedOperand
 					}
-					_ = decodeValue(val, tok.Operand)
-					tok.Operand.Node = nil
+					_ = decodeValue(val, &tok.Operand)
+					xpression.SetLiteral(tok)
 				}
 			}
 		}
@@ -580,7 +582,7 @@ func arrayElemByFilter(input []byte, nod *tNode, inside bool) (result []byte, er
 		if err != nil {
 			return nil, err
 		}
-		b, err = filterMatch(input[s:e], nod.Filter.toks)
+		b, err = filterMatch(input[s:e], nod.Filter)
 		if err != nil {
 			return nil, err
 		}
