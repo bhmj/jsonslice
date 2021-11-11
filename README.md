@@ -64,17 +64,17 @@ func main() {
 
 2. A single index reference returns an element, not an array; a slice reference always returns array:  
 ```
-> echo '[{"name":"abc"}, {"name":"def"}]' | ./build/jsonslice '$[0].name' 
+$ echo '[{"name":"abc"}, {"name":"def"}]' | ./build/jsonslice '$[0].name' 
 "abc"
 ```
 ```
-> echo '[{"name":"abc"}, {"name":"def"}]' | .build//jsonslice '$[0:1].name'
+$ echo '[{"name":"abc"}, {"name":"def"}]' | .build//jsonslice '$[0:1].name'
 ["abc"]
 ```
 
 3. Indexing or slicing on root node is supported (assuming json is an array and not an object):  
 ```
-cat sample1.json | ./build/jsonslice '$[0].author'
+$ cat sample1.json | ./build/jsonslice '$[0].author'
 ```
 
 ## Expressions
@@ -128,7 +128,7 @@ If `step` is negative:
 
   Operator | Description
   --- | ---
-  math  | `+` `-` `*` `/` `%`, `**`
+  math  | `+` `-` `*` `/` `%` `**`
   `===`  | Strict equality (mimics JavaScript). Examples: `true===true, 42===42`
   `==`  | Abstract equality (mimics JavaScript). Examples: `true=="1", 42=="42"`. <br>Use single or double quotes for string expressions.<br>`[?(@.color=='red')]` or `[?(@.color=="red")]`
   `!=`  | Abstract not equal to<br>`[?(@.author != "Herman Melville")]`
@@ -142,7 +142,7 @@ If `step` is negative:
   `&&`  | Logical AND<br>`[?(@.price < 10 && @isbn)]`
   `\|\|`  | Logical OR<br>`[?(@.price > 10 \|\| @.category == 'reference')]`
   `!`  | Logical NOT<br>`[?(!@.is_expensive)]`
-  `\|`  | Bitwise OR<br>`[?(@.bits|@.pieces > 0)]`
+  `\|`  | Bitwise OR<br>`[?(@.bits\|@.pieces > 0)]`
   `&`  | Bitwise AND<br>`[?(@.bits & 7 == 1)]`
   `^`  | Bitwise XOR<br>`[?(@.bits ^ 1 > 0)]`
   `~`  | Bitwise NOT<br>`[?(~@.bits == 0xF0)]`
@@ -151,7 +151,7 @@ If `step` is negative:
 
 #### Comparison details
 Comparison mostly complies with JavaScript specifications, see [Testing and Comparison Operations](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-testing-and-comparison-operations).   
-Please let me know if you encounter wrong or inconsistent comparison behaviour by creating an issue in this repository.
+If you encounter wrong or inconsistent comparison behaviour please let me know by creating an issue in this repository.
 
 ## Examples
 

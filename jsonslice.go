@@ -32,16 +32,8 @@ var (
 	errUnrecognizedValue,
 	errUnexpectedEnd,
 	errInvalidLengthUsage,
-	errObjectOrArrayExpected,
-	errUnexpectedEOT,
-	errUnknownToken,
 	errUnexpectedStringEnd,
-	errInvalidBoolean,
-	errEmptyFilter,
-	errNotEnoughArguments,
-	errUnknownOperator,
-	errInvalidArithmetic,
-	errInvalidOperatorStrings error
+	errObjectOrArrayExpected error
 )
 
 var speChars [128]byte
@@ -74,15 +66,7 @@ func init() {
 	errUnexpectedEnd = errors.New("unexpected end of input")
 	errInvalidLengthUsage = errors.New("length() is only applicable to array or string")
 	errObjectOrArrayExpected = errors.New("object or array expected")
-	errUnexpectedEOT = errors.New("unexpected end of token")
-	errUnknownToken = errors.New("unknown token")
 	errUnexpectedStringEnd = errors.New("unexpected end of string")
-	errInvalidBoolean = errors.New("invalid boolean value")
-	errEmptyFilter = errors.New("empty filter")
-	errNotEnoughArguments = errors.New("not enough arguments")
-	errUnknownOperator = errors.New("unknown operator")
-	errInvalidArithmetic = errors.New("invalid operands for arithmetic operator")
-	errInvalidOperatorStrings = errors.New("operator is not applicable to strings")
 }
 
 type word []byte
@@ -96,8 +80,6 @@ const (
 	cFilter   = 1 << iota // 32 filter
 	cWild     = 1 << iota // 64 wildcard (*)
 	cDeep     = 1 << iota // 128 deepscan (..)
-
-	cRoot = 1 << iota // key is referred from root
 
 	cEmpty = 1 << 29 // empty number
 	cNAN   = 1 << 30 // not-a-number
