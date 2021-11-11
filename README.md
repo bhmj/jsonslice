@@ -52,9 +52,11 @@ func main() {
 `jsonslice.Get(data []byte, jsonpath string) ([]byte, error)`  
   - get a slice from raw json data specified by jsonpath
 
-## Specs
+## Specs and references
 
-See [Stefan Gössner's article](http://goessner.net/articles/JsonPath/index.html#e2) for original specs and examples.  
+* Originally based on [Stefan Gössner's article](http://goessner.net/articles/JsonPath/index.html#e2).
+* Expression evaluator designed to comply with [ECMAScript Language: Expressions reference](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html).
+* A proud member of amazing [Christoph Burgmer's json-path-comparison](https://github.com/cburgmer/json-path-comparison).
 
 ## Syntax features
 
@@ -62,17 +64,17 @@ See [Stefan Gössner's article](http://goessner.net/articles/JsonPath/index.html
 
 2. A single index reference returns an element, not an array; a slice reference always returns array:  
 ```
-> echo '[{"id":1}, {"id":2}]' | ./jsonslice '$[0].id' 
-1
+> echo '[{"name":"abc"}, {"name":"def"}]' | ./build/jsonslice '$[0].name' 
+"abc"
 ```
 ```
-> echo '[{"id":1}, {"id":2}]' | ./jsonslice '$[0:1].id'
-[1]
+> echo '[{"name":"abc"}, {"name":"def"}]' | .build//jsonslice '$[0:1].name'
+["abc"]
 ```
 
 3. Indexing or slicing on root node is supported (assuming json is an array and not an object):  
 ```
-./jsonslice '$[0].author' sample1.json
+cat sample1.json | ./build/jsonslice '$[0].author'
 ```
 
 ## Expressions
@@ -126,9 +128,11 @@ If `step` is negative:
 
   Operator | Description
   --- | ---
+  math  | `+` `-` `*` `/` `%`, `**`
   `===`  | Strict equality (mimics JavaScript). Examples: `true===true, 42===42`
   `==`  | Abstract equality (mimics JavaScript). Examples: `true=="1", 42=="42"`. <br>Use single or double quotes for string expressions.<br>`[?(@.color=='red')]` or `[?(@.color=="red")]`
-  `!=`  | Not equal to<br>`[?(@.author != "Herman Melville")]`
+  `!=`  | Abstract not equal to<br>`[?(@.author != "Herman Melville")]`
+  `!==`  | Strict not equal to<br>`?(@.tag !== "1")`
   `>`   | Greater than<br>`[?(@.price > 10)]`
   `>=`  | Greater than or equal to
   `<`   | Less than
@@ -137,53 +141,60 @@ If `step` is negative:
   `!~` or `!=~`  | Don't match a regexp<br>`[?(@.name !~ /sword.*/i]`
   `&&`  | Logical AND<br>`[?(@.price < 10 && @isbn)]`
   `\|\|`  | Logical OR<br>`[?(@.price > 10 \|\| @.category == 'reference')]`
+  `!`  | Logical NOT<br>`[?(!@.is_expensive)]`
+  `\|`  | Bitwise OR<br>`[?(@.bits|@.pieces > 0)]`
+  `&`  | Bitwise AND<br>`[?(@.bits & 7 == 1)]`
+  `^`  | Bitwise XOR<br>`[?(@.bits ^ 1 > 0)]`
+  `~`  | Bitwise NOT<br>`[?(~@.bits == 0xF0)]`
+  `<<`  | Bitwise left shift<br>`[?(@.bits << 1 == 2)]`
+  `>>`  | Bitwise right shift<br>`[?(@.bits >> 1 == 0)]`
 
 #### Comparison details
- When one side of comparison is a | then other side is converted to it
---- | ---
-number | true -> 1<br/>false -> 0<br/>"1" -> 1<br/>"a" -> NaN
-bool | "" -> false<br/>"0" -> false<br/>"1" -> true<br/>"a" -> undefined
+Comparison mostly complies with JavaScript specifications, see [Testing and Comparison Operations](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-testing-and-comparison-operations).   
+Please let me know if you encounter wrong or inconsistent comparison behaviour by creating an issue in this repository.
 
 ## Examples
 
 Assuming `sample0.json` and `sample1.json` in the example directory:  
 
-  `cat sample0.json | ./jsonslice '$.store.book[0]'`  
-  `cat sample0.json | ./jsonslice '$.store.book[0].title'`  
-  `cat sample0.json | ./jsonslice '$.store.book[0:-1]'`  
-  `cat sample1.json | ./jsonslice '$[1].author'`  
-  `cat sample0.json | ./jsonslice '$.store.book[?(@.price > 10)]'`  
-  `cat sample0.json | ./jsonslice '$.store.book[?(@.price > $.expensive)]'`  
+  `cat cmd/sample0.json | ./build/jsonslice '$.store.book[0]'`  
+  `cat cmd/sample0.json | ./build/jsonslice '$.store.book[0].title'`  
+  `cat cmd/sample0.json | ./build/jsonslice '$.store.book[0:-1]'`  
+  `cat cmd/sample1.json | ./build/jsonslice '$[1].author'`  
+  `cat cmd/sample0.json | ./build/jsonslice '$.store.book[?(@.price > 10)]'`  
+  `cat cmd/sample0.json | ./build/jsonslice '$.store.book[?(@.price > $.expensive)]'`  
 
 Much more examples can be found in `jsonslice_test.go`  
 
-## Benchmarks (Core i5-7500)
+## Benchmarks (Core i9-9880H)
 
 ```diff
 $ go test -bench=. -benchmem -benchtime=4s
-goos: linux
+goos: darwin
 goarch: amd64
 pkg: github.com/bhmj/jsonslice
+cpu: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
 ++ usually you need to unmarshal the whole JSON to get an object by jsonpath (for reference):
-Benchmark_Unmarshal-4                     500000             14712 ns/op            4368 B/op        130 allocs/op
+Benchmark_Unmarshal-16                    398998      11268 ns/op    4272 B/op    130 allocs/op
 ++ and here's a jsonslice.Get:
-Benchmark_Jsonslice_Get_Simple-4         2000000              3878 ns/op             128 B/op          4 allocs/op
+Benchmark_Jsonslice_Get_Simple-16        1660604       2885 ns/op      24 B/op      1 allocs/op
 ++ Get() involves parsing a jsonpath, here it is:
-Benchmark_JsonSlice_ParsePath-4         10000000               858 ns/op             160 B/op          5 allocs/op
-++ in case you aggregate some non-contiguous elements, it may take a bit longer (extra mallocs involved):
-Benchmark_Jsonslice_Get_Aggregated-4     1000000              5671 ns/op             417 B/op         13 allocs/op
+Benchmark_JsonSlice_ParsePath-16        11955015        400 ns/op       0 B/op      0 allocs/op
+++ if you aggregate some non-contiguous elements, it may take a bit longer (extra mallocs involved):
+Benchmark_Jsonslice_Get_Aggregated-16    1000000       4335 ns/op     313 B/op     10 allocs/op
 ++ usual unmarshalling a large json:
-Benchmark_Unmarshal_10Mb-4                   100          50744817 ns/op             248 B/op          5 allocs/op
+Benchmark_Unmarshal_10Mb-16                  100   40787414 ns/op     224 B/op      5 allocs/op
 ++ jsonslicing the same json, target element is near the start:
-Benchmark_Jsonslice_Get_10Mb_First-4     3000000              1851 ns/op             128 B/op          4 allocs/op
+Benchmark_Jsonslice_Get_10Mb_First-16    3459492       1370 ns/op      24 B/op      1 allocs/op
 ++ jsonslicing the same json, target element is near the end: still beats Unmarshal
-Benchmark_Jsonslice_Get_10Mb_Last-4          200          38286509 ns/op             133 B/op          4 allocs/op
+Benchmark_Jsonslice_Get_10Mb_Last-16         133   35731931 ns/op      54 B/op      1 allocs/op
 PASS
-ok      github.com/bhmj/jsonslice       83.152s
-
+ok      github.com/bhmj/jsonslice       52.452s
 ```
 
 ## Changelog
+
+**1.1.0** (2021-11-12) -- Expression parser/evaluator has been separated to [different project](https://github.com/bhmj/xpression/) and completely rewritten. Parentheses now fully supported. Exponentiation operator added (`**`). Bitwise operators added (`|`, `&`, `^`, `<<`, `>>`). All expression calculations are JavaScript-compliant.
 
 **1.0.6** (2021-10-31) -- JS-like behaviour on string/number/boolean values comparison. `===` operator added for strict comparison. Strings are now comparable.
 
@@ -249,7 +260,9 @@ ok      github.com/bhmj/jsonslice       83.152s
 - [x] deepscan operator (`..`)
 - [x] syntax extensions: `$.'keys with spaces'.price`
 - [x] flexible syntax: `$[0]` works on both `[1,2,3]` and `{"0":"abc"}`
+- [x] JavaScript-compatible expressions
 - [ ] IN (), NOT IN ()
+- [ ] cache parsed jsonpaths of used variables at filterMatch.varFunc(str)
 - [ ] Optionally unmarshal the result
 - [ ] Option to select aggregation mode (nested or plain)
 
