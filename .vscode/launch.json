@@ -11,7 +11,7 @@
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/jsonslice/main.go",
             "env": {},
-            "args": ["$.store.book[?(@.price > 10)]", "${workspaceFolder}/cmd/sample0.json"]
+            "args": ["$[?(@.price > 10)]", "${workspaceFolder}/example/sample1.json"]
        }
     ]
 }

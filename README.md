@@ -74,7 +74,7 @@ $ echo '[{"name":"abc"}, {"name":"def"}]' | .build//jsonslice '$[0:1].name'
 
 3. Indexing or slicing on root node is supported (assuming json is an array and not an object):  
 ```
-$ cat sample1.json | ./build/jsonslice '$[0].author'
+$ cat example/sample1.json | ./build/jsonslice '$[0].author'
 ```
 
 ## Expressions
@@ -157,12 +157,12 @@ If you encounter wrong or inconsistent comparison behaviour please let me know b
 
 Assuming `sample0.json` and `sample1.json` in the example directory:  
 
-  `cat cmd/sample0.json | ./build/jsonslice '$.store.book[0]'`  
-  `cat cmd/sample0.json | ./build/jsonslice '$.store.book[0].title'`  
-  `cat cmd/sample0.json | ./build/jsonslice '$.store.book[0:-1]'`  
-  `cat cmd/sample1.json | ./build/jsonslice '$[1].author'`  
-  `cat cmd/sample0.json | ./build/jsonslice '$.store.book[?(@.price > 10)]'`  
-  `cat cmd/sample0.json | ./build/jsonslice '$.store.book[?(@.price > $.expensive)]'`  
+  `cat example/sample0.json | ./build/jsonslice '$.store.book[0]'`  
+  `cat example/sample0.json | ./build/jsonslice '$.store.book[0].title'`  
+  `cat example/sample0.json | ./build/jsonslice '$.store.book[0:-1]'`  
+  `cat example/sample1.json | ./build/jsonslice '$[1].author'`  
+  `cat example/sample0.json | ./build/jsonslice '$.store.book[?(@.price > 10)]'`  
+  `cat example/sample0.json | ./build/jsonslice '$.store.book[?(@.price > $.expensive)]'`  
 
 Much more examples can be found in `jsonslice_test.go`  
 

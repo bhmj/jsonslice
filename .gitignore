@@ -1,6 +1,6 @@
-debug
+*debug*
 *.exe
 *.prof
 *.test
-coverage.out
+cover*.out
 /build/*

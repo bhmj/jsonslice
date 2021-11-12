@@ -403,7 +403,6 @@ func Test_StringComparison(t *testing.T) {
 	}
 
 	for _, tst := range tests {
-		// println(tst.Query)
 		res, err := Get(tst.Data, tst.Query)
 		if err != nil {
 			t.Errorf(tst.Query + " : " + err.Error())

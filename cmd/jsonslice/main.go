@@ -12,7 +12,7 @@ import (
 func main() {
 
 	if len(os.Args) < 2 {
-		fmt.Printf("Slice out a part of JSON using jsonpath.\nUsage: %[1]s jsonpath [input_file]\n  ex.1: %[1]s '$.store.book[0].author' sample0.json\n  ex.2: cat sample0.json | %[1]s '$.store.book[0].author'\n", filepath.Base(os.Args[0]))
+		fmt.Printf("Slice out a part of JSON using jsonpath.\nUsage: %[1]s jsonpath <expression> [input_file]\n  ex.1: %[1]s '$.store.book[0].author' sample0.json\n  ex.2: cat sample0.json | %[1]s '$.store.book[0].author'\n", filepath.Base(os.Args[0]))
 		return
 	}
 

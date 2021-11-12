@@ -6,7 +6,8 @@ import (
 	"github.com/bhmj/xpression"
 )
 
-// readFilter reads expression in ?( ... ) filter, parses tokens and writes result to nod.Filter
+// readFilter reads expression in ?( ... ) filter, parses tokens and writes result to nod.Filter.
+// Consumes closing ) and ]
 func readFilter(path []byte, i int, nod *tNode) (int, error) {
 	e, err := findClosingBracket(path, i)
 	if err != nil {
