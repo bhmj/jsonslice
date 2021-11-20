@@ -62,23 +62,29 @@ func findClosingBracket(path []byte, i int) (int, error) {
 
 // filterMatch evaluates previously parsed expression and returns boolean to filter out array elements
 func filterMatch(input []byte, toks []*xpression.Token) (bool, error) {
-	varFunc := func(str []byte) (*xpression.Operand, error) {
+	varFunc := func(str []byte, result *xpression.Operand) error {
+		if str[0] == '$' {
+			// root-based reference has already been evaluated at start
+			return nil
+		}
 		if str[0] != '@' {
-			return xpression.Undefined(), nil
+			// we only handle item-based references
+			result.SetUndefined()
+			return nil
 		}
 		str[0] = '$'
 		defer func() { str[0] = '@' }()
 		val, err := Get(input, string(str))
 		if val == nil || err != nil {
 			// not found or other error
-			return xpression.Undefined(), nil
+			result.SetUndefined()
+			return err
 		}
-		op := &xpression.Operand{}
-		err = decodeValue(val, op)
+		err = decodeValue(val, result)
 		if err != nil {
-			return xpression.Undefined(), nil
+			result.SetUndefined()
 		}
-		return op, nil
+		return err
 	}
 
 	op, err := xpression.Evaluate(toks, varFunc)

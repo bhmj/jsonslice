@@ -138,15 +138,17 @@ func Get(input []byte, path string) ([]byte, error) {
 			break
 		}
 		if n.Filter != nil {
-			for _, tok := range n.Filter {
+			for i, tok := range n.Filter {
 				if tok.Type == xpression.VariableOperand && tok.Operand.Str[0] == '$' {
+					// every variable has an empty token right after it for storing the result
+					result := n.Filter[i+1] 
+					// evaluate root-based reference
 					val, err := Get(input, string(tok.Operand.Str))
 					if err != nil {
 						// not found or other error
-						tok.Type = xpression.UndefinedOperand
+						result.Type = xpression.UndefinedOperand
 					}
-					_ = decodeValue(val, &tok.Operand)
-					xpression.SetLiteral(tok)
+					_ = decodeValue(val, &result.Operand)
 				}
 			}
 		}
