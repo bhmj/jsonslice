@@ -82,8 +82,9 @@ $ cat example/sample1.json | ./build/jsonslice '$[0].author'
 ### Overview 
 ```
   $                   -- root node (can be either object or array)
-  .node               -- dot-notated child
-  .'some node'        -- dot-notated child (syntax extension)
+  $.node              -- dot-notated child
+  $.node.deeper       -- dot-notated child (chain of them)
+  $.'some node'       -- dot-notated child (syntax extension)
   ['node']            -- bracket-notated child
   ['foo','bar']       -- bracket-notated children (aggregation)
   [5]                 -- array index
@@ -92,6 +93,10 @@ $ cat example/sample1.json | ./build/jsonslice '$[0].author'
   [1:9:2]             -- array slice (+step)
   .*  .[*]  .[:]      -- wildcard
   ..key               -- deepscan
+  .'\''               -- escape sequences supported (\", \', \n, \r, \t, \0, \\)
+  .'k\x0A'            -- escaped hex bytes supported
+  .'k\u00F6'          -- escaped 16-bit unicode codepoints supported
+  .'k\U000000F6'      -- escaped 32-bit unicode codepoints supported
 ```
 ### Functions
 ```
@@ -194,6 +199,13 @@ ok      github.com/bhmj/jsonslice       52.452s
 
 ## Changelog
 
+**1.1.2** (2022-01-02) -- Unicode support added. Expression parser upgrade to v0.9.1  
+Bugfix: indexing of array element inside expression (`@[-1]`).  
+Bugfix: ecaped backslash in node key now works (`["\\"]`).  
+See `Test_Fixes` function for bugfix details.
+
+**1.1.1** (2022-10-20) -- Expression parser upgrade to v0.9.0
+
 **1.1.0** (2021-11-12) -- Expression parser/evaluator has been separated to [different project](https://github.com/bhmj/xpression/) and completely rewritten. Parentheses now fully supported. Exponentiation operator added (`**`). Bitwise operators added (`|`, `&`, `^`, `<<`, `>>`). All expression calculations are JavaScript-compliant.
 
 **1.0.6** (2021-10-31) -- JS-like behaviour on string/number/boolean values comparison. `===` operator added for strict comparison. Strings are now comparable.
@@ -261,6 +273,7 @@ ok      github.com/bhmj/jsonslice       52.452s
 - [x] syntax extensions: `$.'keys with spaces'.price`
 - [x] flexible syntax: `$[0]` works on both `[1,2,3]` and `{"0":"abc"}`
 - [x] JavaScript-compatible expressions
+- [x] Unicode support
 - [ ] IN (), NOT IN ()
 - [ ] cache parsed jsonpaths of used variables at filterMatch.varFunc(str)
 - [ ] Optionally unmarshal the result
