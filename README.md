@@ -199,10 +199,12 @@ ok      github.com/bhmj/jsonslice       52.452s
 
 ## Changelog
 
-**1.1.1** (2022-01-02) -- Unicode support added.  
+**1.1.2** (2022-01-02) -- Unicode support added. Expression parser upgrade to v0.9.1  
 Bugfix: indexing of array element inside expression (`@[-1]`).  
 Bugfix: ecaped backslash in node key now works (`["\\"]`).  
 See `Test_Fixes` function for bugfix details.
+
+**1.1.1** (2022-10-20) -- Expression parser upgrade to v0.9.0
 
 **1.1.0** (2021-11-12) -- Expression parser/evaluator has been separated to [different project](https://github.com/bhmj/xpression/) and completely rewritten. Parentheses now fully supported. Exponentiation operator added (`**`). Bitwise operators added (`|`, `&`, `^`, `<<`, `>>`). All expression calculations are JavaScript-compliant.
 
