@@ -17,6 +17,7 @@ help:
 	echo "    run           - run jsonslice CLI"
 	echo "    lint          - run linters"
 	echo "    test          - run tests"
+	echo "    test-short    - run tests without fuzzy tests"
 
 configure:
 	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
@@ -34,9 +35,12 @@ lint:
 	golangci-lint run
 	gocyclo -over 18 .
 
-test: 
+test:
 	go test ./...
 
-.PHONY: all configure help build run lint test
+test-short:
+	go test -test.short ./...
+
+.PHONY: all configure help build run lint test test-short
 
 $(V).SILENT:

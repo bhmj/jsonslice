@@ -11,7 +11,6 @@ package jsonslice
 
 import (
 	"bytes"
-	"encoding/hex"
 	"errors"
 	"strconv"
 	"sync"
@@ -26,6 +25,7 @@ var (
 	errPathInvalidChar,
 	errPathRootExpected,
 	errPathUnexpectedEnd,
+	errPathUnknownEscape,
 	errPathUnknownFunction,
 	errFieldNotFound,
 	errColonExpected,
@@ -36,16 +36,7 @@ var (
 	errObjectOrArrayExpected error
 )
 
-var speChars [128]byte
-
 func init() {
-
-	speChars['b'] = '\b'
-	speChars['f'] = '\f'
-	speChars['n'] = '\n'
-	speChars['r'] = '\r'
-	speChars['t'] = '\t'
-
 	nodePool = sync.Pool{
 		New: func() interface{} {
 			return &tNode{
@@ -59,6 +50,7 @@ func init() {
 	errPathInvalidChar = errors.New("path: invalid character")
 	errPathRootExpected = errors.New("path: $ expected")
 	errPathUnexpectedEnd = errors.New("path: unexpected end of path")
+	errPathUnknownEscape = errors.New("path: unknown escape")
 	errPathUnknownFunction = errors.New("path: unknown function")
 	errFieldNotFound = errors.New(`field not found`)
 	errColonExpected = errors.New("':' expected")
@@ -141,7 +133,7 @@ func Get(input []byte, path string) ([]byte, error) {
 			for i, tok := range n.Filter {
 				if tok.Type == xpression.VariableOperand && tok.Operand.Str[0] == '$' {
 					// every variable has an empty token right after it for storing the result
-					result := n.Filter[i+1] 
+					result := n.Filter[i+1]
 					// evaluate root-based reference
 					val, err := Get(input, string(tok.Operand.Str))
 					if err != nil {
@@ -170,8 +162,12 @@ func bytein(b byte, seq []byte) bool {
 	return false
 }
 
+var pathTerminator = []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|', '!', '^'}
+
 var keyTerminator = []byte{' ', '\t', ':', '.', ',', '[', '(', ')', ']', '<', '=', '>', '+', '-', '*', '/', '&', '|', '!'}
 
+// readRef recursively reads input path until EOL or path terminator encountered.
+// Returns single-linked list of nodes, end position or error.
 func readRef(path []byte, i int, uptype int) (*tNode, int, error) {
 	var err error
 	var next *tNode
@@ -180,64 +176,69 @@ func readRef(path []byte, i int, uptype int) (*tNode, int, error) {
 	var key word
 
 	if i >= len(path) {
+		// EOL encountered
 		return nil, i, nil
 	}
 
-	// path end?
 	if bytein(path[i], pathTerminator) {
+		// path terminator encountered
 		return nil, i, nil
 	}
+
+	if !bytein(path[i], []byte{'.', '['}) {
+		// only dot and bracket notation allowed
+		return nil, i, errPathInvalidChar
+	}
+
 	nod := getEmptyNode()
 	l := len(path)
 	// [optional] dots
 	if path[i] == '.' {
+		nod.Type = cDot // simple dor notation
 		if i+1 < l && path[i+1] == '.' {
-			nod.Type |= cDeep
+			nod.Type = cDeep // .. means deepscan
 			i++
-		} else {
-			nod.Type |= cDot
 		}
 		i++
+		if i == l {
+			return nil, i, errPathUnexpectedEnd // need key after dot(s)
+		}
 	}
-	if i == l {
-		return nil, i, errPathUnexpectedEnd
-	}
-	// bracket notated
+
+	// NOTE: this sequence of blocks supports .[] notation. Maybe should restrict that?
+
 	if path[i] == '[' {
+		// bracket notated
 		i++
 		i, err = readBrackets(nod, path, i)
 		if i == l || err != nil {
 			return nod, i, err
 		}
-		next, i, err = readRef(path, i, nod.Type)
-		nod.Next = next
-		return nod, i, err
-	}
-	if nod.Type&(cDot|cDeep) == 0 {
-		return nil, i, errPathInvalidChar
-	}
-	// single key
-	key, nod.Slice[0], sep, i, flags, _ = readKey(path, i)
-	if len(key) > 0 {
-		nod.Keys = append(nod.Keys, key)
-	}
-	nod.Type |= flags // cWild, cFullScan
-	if i == l {
-		return nod, i, nil
-	}
-	// function
-	if sep == '(' && i+1 < l && path[i+1] == ')' {
-		_, i, err = detectFn(path, i, nod)
-		return nod, i, err
+	} else {
+		// dot (or deepscan) notated
+		key, nod.Slice[0], sep, i, flags, _ = readKey(path, i)
+		if len(key) > 0 {
+			nod.Keys = append(nod.Keys, key)
+		}
+		nod.Type |= flags // cWild, cFullScan
+		if i == l {
+			return nod, i, nil
+		}
+		// function
+		if sep == '(' && i+1 < l && path[i+1] == ')' {
+			_, i, err = detectFn(path, i, nod)
+			return nod, i, err
+		}
 	}
 
-	// recursive
+	// recurse
 	next, i, err = readRef(path, i, nod.Type)
 	nod.Next = next
 	return nod, i, err
 }
 
-// read bracket-notated keys
+// readBrackets read bracket-notated expression.
+//
 // consumes final ']'
 func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 	var (
@@ -258,7 +259,7 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 		if err != nil {
 			return i, err
 		}
-		err = setKey(nod, key, ikey, sep, pos)
+		err = setupNode(nod, key, ikey, sep, pos)
 		if err != nil {
 			return i, err
 		}
@@ -282,130 +283,55 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 	return i, nil
 }
 
-// read next key
-// targeted to: ".key", ".*", ".1", ".-1"
+// readKey reads next key from path[i].
+// Key must be any of the following: quoted string, word bounded by keyTerminator, *, 123
 // returns:
 //   key   = the key
 //   ikey  = integer converted key
 //   sep   = key list separator (expected , : [ ] . +-*/=! 0)
-//   i     = current i (after the sep)
+//   i     = current i (on separator)
 //   flags = cWild if wildcard
 //   err   = error
 func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 	l := len(path)
-	s := i
-	var e int
+	var bound byte
+	var key []byte
+	var err error
+	var flag int
+
 	if i == l {
 		return nil, 0, 0, i, 0, errPathUnexpectedEnd
 	}
-	step := 0
-	bound := byte(0)
+
 	if bytein(path[i], []byte{'\'', '"'}) {
-		bound = path[i]
-		step++ // will be a closing bound
-		s++    // start 1 char right
-		i++
-	}
-	//prev := byte(0)
-	if bound > 0 {
-		s, e, i = readQuotedKey(path, i, bound)
+		// quoted string
+		key, i, err = readQuotedKey(path, i)
 	} else {
-		if path[i] == '-' {
-			i++
+		// terminator bounded string
+		key, i, err = readTerminatorBounded(path, i, keyTerminator)
+		if len(key) == 1 && key[0] == '*' {
+			flag = cWild
+			key = key[:0]
 		}
-		for i < l {
-			if bytein(path[i], keyTerminator) {
-				if path[i] == '*' && s-i == 0 {
-					step++ // * usually * is a terminator but not in .* so skip it
-				}
-				break
-			}
-			i++
-		}
-		e = i
 	}
-	/*
-		i!=l bound=0  // (unbounded) terminator reached s:i (empty for * -> step)
-		i!=l bound="" // (bounded) key s:i (i==bound) -> step
-		i==l bound=0  // (unbounded) EOL reached s:i, i==l
-		i==l bound="" // (bounded) right bound missing
-	*/
-	if i == l && bound != 0 {
-		// unclosed bound
-		return nil, cNAN, 0, i, 0, errPathUnexpectedEnd
+	if err != nil {
+		return nil, 0, 0, i, 0, err
 	}
-	if i+step != l {
-		bound = path[i+step]
+
+	if i < l {
+		bound = path[i]
 	} else {
 		bound = 0
 	}
-	n := toInt(path[s:e])
-	return path[s:e], n, bound, i + step, flags(e-s, path[s], n), nil
-}
-
-// read quotedkey
-// return
-//   s start index
-//   e end index
-//   i current pointer
-//
-func readQuotedKey(path []byte, i int, bound byte) (int, int, int) {
-	l := len(path)
-	s := i
-	w := i
-	var prev byte
-
-	for i < l {
-		if path[i] == bound {
-			if prev == '\\' {
-				w--
-			} else {
-				break
-			}
-		}
-		if i != w {
-			path[w] = path[i]
-		}
-		prev = path[i]
-		i++
-		w++
-	}
-	return s, w, i
-}
-
-// flags determined by ikey
-func flags(n int, ch byte, ikey int) int {
-	flag := 0
+	ikey := toInt(key)
 	if ikey < 0 || ikey == cEmpty {
 		flag |= cFullScan // fullscan if $[-1], $[1,-1] or $[1:-1] or $[1:]
 	}
-	if n == 0 && ch == '*' {
-		flag |= cWild
-	}
-	return flag
+	return key, ikey, bound, i, flag, nil
 }
 
-func toInt(buf []byte) int {
-	if len(buf) == 0 {
-		return cEmpty
-	}
-	n := 0
-	sign := 1
-	for _, ch := range buf {
-		if ch == '-' {
-			sign = -1
-			continue
-		}
-		if ch >= '0' && ch <= '9' {
-			n = n*10 + int(ch-'0')
-		} else {
-			return cNAN
-		}
-	}
-	return n * sign
-}
-
-func setKey(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
+// setupNode sets up node Type and either (appens Keys or Elems) or (fills up Slice) depending on note Type
+func setupNode(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
 	switch sep {
 	case ']':
 		// end of key list
@@ -449,8 +375,6 @@ func setKey(nod *tNode, key []byte, ikey int, sep byte, pos int) error {
 	nod.Type |= cDot
 	return nil
 }
-
-var pathTerminator = []byte{' ', '\t', '<', '=', '>', '+', '-', '*', '/', ')', '&', '|', '!'}
 
 func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
 	if len(nod.Keys) == 0 {
@@ -669,16 +593,15 @@ func readObjectKey(input []byte, i int) ([]byte, int, error) {
 			return nil, i, nil
 		}
 	}
-	s := i + 1
-	e, err := skipString(input, i)
+	key, i, err := readQuotedKey(input, i)
 	if err != nil {
 		return nil, i, err
 	}
-	i, err = seekToValue(input, e)
+	i, err = seekToValue(input, i)
 	if err != nil {
 		return nil, i, err
 	}
-	return input[s : e-1], i, nil
+	return key, i, nil
 }
 
 // get array element(s) by index
@@ -985,32 +908,6 @@ func matchKeys(key []byte, nodkey []byte) bool {
 	la, lb := len(key), len(nodkey)
 	for a < la && b < lb {
 		ch := key[a]
-		if ch == '\\' {
-			a++
-			if a == la {
-				break
-			}
-			switch key[a] {
-			case '"', '\\', '/':
-				ch = key[a]
-			case 'b', 'f', 'n', 'r', 't':
-				ch = speChars[key[a]]
-			case 'u':
-				if a > la-5 || b > b-2 {
-					break
-				}
-				bb := make([]byte, 2)
-				_, err := hex.Decode(bb, key[a+1:a+5])
-				if err != nil {
-					return false
-				}
-				if bb[0] != nodkey[b] {
-					return false
-				}
-				b++
-				ch = bb[1]
-			}
-		}
 		if ch != nodkey[b] {
 			return false
 		}

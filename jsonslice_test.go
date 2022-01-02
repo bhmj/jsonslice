@@ -569,6 +569,13 @@ func Test_Fixes(t *testing.T) {
 		Query    string
 		Expected []byte
 	}{
+		// using indexing of array element inside expression
+		// fixed in 1.1.1
+		{[]byte(`[ [2,3], ["a"], [0,2], [2] ]`), `$[?(@[-1]==2)]`, []byte(`[[0,2],[2]]`)},
+		// single/double quoted notation with backslash escaped backslash
+		// fixed in 1.1.1
+		{[]byte(`{"\\": "value"}`), `$['\\']`, []byte(`"value"`)},
+		{[]byte(`{"\\": "value"}`), `$["\\"]`, []byte(`"value"`)},
 		// closing square bracket inside a string value has been mistakenly seen as an array bound
 		// fixed in 0.7.2
 		{[]byte(`{"foo":["[]"],"bar":123}`), `$.bar`, []byte(`123`)},
@@ -587,6 +594,33 @@ func Test_Fixes(t *testing.T) {
 		// fixed in 1.0.5
 		{[]byte(`{"kind":"Pod", "spec":{ "containers": [{"name":"c1"}, {"name":"c2"}] }}`), `$.spec.containers[:]`, []byte(`[{"name":"c1"},{"name":"c2"}]`)},
 		{[]byte(`{"kind":"Pod", "spec":{ "containers": [{"name":"c1"}, {"name":"c2"}] }}`), `$..spec.containers[:]`, []byte(`[[{"name":"c1"},{"name":"c2"}]]`)},
+	}
+
+	for _, tst := range tests {
+		res, err := Get(tst.Data, tst.Query)
+		if err != nil {
+			t.Errorf(tst.Query + " : " + err.Error())
+		} else if compareSlices(res, tst.Expected) != 0 {
+			t.Errorf(tst.Query + "\n\texpected `" + string(tst.Expected) + "`\n\tbut got  `" + string(res) + "`")
+		}
+	}
+}
+
+func Test_Unicode(t *testing.T) {
+
+	tests := []struct {
+		Data     []byte
+		Query    string
+		Expected []byte
+	}{
+		// json: utf-8, path: utf-8
+		{[]byte(`{"Motörhead":"Lemmy"}`), `$."Motörhead"`, []byte(`"Lemmy"`)},
+		// json: utf-8, path: unicode escaped
+		{[]byte(`{"Motörhead":"Lemmy"}`), `$."Mot\u00F6rhead"`, []byte(`"Lemmy"`)},
+		// json: unicode escaped, path: utf-8
+		{[]byte(`{"Mot\u00F6rhead":"Lemmy"}`), `$."Motörhead"`, []byte(`"Lemmy"`)},
+		// json: & path: both unicode escaped
+		{[]byte(`{"Mot\u00F6rhead":"Lemmy"}`), `$."Mot\u00F6rhead"`, []byte(`"Lemmy"`)},
 	}
 
 	for _, tst := range tests {
