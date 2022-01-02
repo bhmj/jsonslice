@@ -94,9 +94,9 @@ $ cat example/sample1.json | ./build/jsonslice '$[0].author'
   .*  .[*]  .[:]      -- wildcard
   ..key               -- deepscan
   .'\''               -- escape sequences supported (\", \', \n, \r, \t, \0, \\)
-  .'k\x0A'            -- escaped hex bytes supported
-  .'k\u00F6'          -- escaped 16-bit unicode codepoints supported
-  .'k\U000000F6'      -- escaped 32-bit unicode codepoints supported
+  .'\x0A'            -- escaped hex bytes supported
+  .'\u00F6'          -- escaped 16-bit unicode codepoints supported
+  .'\U000000F6'      -- escaped 32-bit unicode codepoints supported
 ```
 ### Functions
 ```
@@ -200,11 +200,11 @@ ok      github.com/bhmj/jsonslice       52.452s
 ## Changelog
 
 **1.1.2** (2022-01-02) -- Unicode support added. Expression parser upgrade to v0.9.1  
-Bugfix: indexing of array element inside expression (`@[-1]`).  
-Bugfix: ecaped backslash in node key now works (`["\\"]`).  
+Bugfix: indexing of array element inside expression (`@[2]`).  
+Bugfix: ecaped backslash in node key now works (`$.["\\"]`).  
 See `Test_Fixes` function for bugfix details.
 
-**1.1.1** (2022-10-20) -- Expression parser upgrade to v0.9.0
+**1.1.1** (2021-10-20) -- Expression parser upgrade to v0.9.0
 
 **1.1.0** (2021-11-12) -- Expression parser/evaluator has been separated to [different project](https://github.com/bhmj/xpression/) and completely rewritten. Parentheses now fully supported. Exponentiation operator added (`**`). Bitwise operators added (`|`, `&`, `^`, `<<`, `>>`). All expression calculations are JavaScript-compliant.
 
