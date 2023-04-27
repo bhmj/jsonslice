@@ -336,6 +336,37 @@ func Test_Expressions(t *testing.T) {
 	}
 }
 
+func Test_FuncNow(t *testing.T) {
+
+	tests := []struct {
+		name  string
+		Query string
+		isNil bool
+	}{
+		{"happy path", "$.now()", false},
+		{"invalid use of now function, will return nil", "$.x.now()", true},
+		{"invalid use of now function, will return nil root level", "$.now(\"2006-01-02T15:04:05.000Z\")", true},
+	}
+
+	for _, tst := range tests {
+		// println(tst.Query)
+		actual, _ := Get(data, tst.Query)
+		if !tst.isNil {
+			tt := time.Now().Format("2006-01-02T15:04:05.000Z")
+			expected, _ := json.Marshal(tt)
+
+			if compareSlices(actual, expected) != 0 {
+				t.Errorf("\n\ttestName:" + tst.name + "\n\ttestQuery:" + tst.Query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(actual) + "`")
+			}
+		} else {
+			if actual != nil {
+				t.Errorf("\n\ttestName:" + tst.name + "testQuery:\n\t" + tst.Query + "\n\texpected `" + string("<nil>") + "`\n\tbut got  `" + string(actual) + "`")
+			}
+		}
+
+	}
+}
+
 func Test_AbstractComparison(t *testing.T) {
 
 	tests := []struct {

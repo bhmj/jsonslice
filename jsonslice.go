@@ -11,9 +11,11 @@ package jsonslice
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/bhmj/xpression"
 )
@@ -33,7 +35,8 @@ var (
 	errUnexpectedEnd,
 	errInvalidLengthUsage,
 	errUnexpectedStringEnd,
-	errObjectOrArrayExpected error
+	errObjectOrArrayExpected,
+	errInvalidNowUsage error
 )
 
 func init() {
@@ -59,6 +62,7 @@ func init() {
 	errInvalidLengthUsage = errors.New("length() is only applicable to array or string")
 	errObjectOrArrayExpected = errors.New("object or array expected")
 	errUnexpectedStringEnd = errors.New("unexpected end of string")
+	errInvalidNowUsage = errors.New("now() is only applicable to root")
 }
 
 type word []byte
@@ -102,8 +106,8 @@ func getEmptyNode() *tNode {
 
 // Get returns a part of input, matching jsonpath.
 // In terms of allocations there are two cases of retreiving data from the input:
-//   1) simple case: the result is a simple subslice of a source input.
-//   2) the result is a merge of several non-contiguous parts of input. More allocations are needed.
+//  1. simple case: the result is a simple subslice of a source input.
+//  2. the result is a merge of several non-contiguous parts of input. More allocations are needed.
 func Get(input []byte, path string) ([]byte, error) {
 
 	if len(path) == 0 {
@@ -286,12 +290,13 @@ func readBrackets(nod *tNode, path []byte, i int) (int, error) {
 // readKey reads next key from path[i].
 // Key must be any of the following: quoted string, word bounded by keyTerminator, *, 123
 // returns:
-//   key   = the key
-//   ikey  = integer converted key
-//   sep   = key list separator (expected , : [ ] . +-*/=! 0)
-//   i     = current i (on separator)
-//   flags = cWild if wildcard
-//   err   = error
+//
+//	key   = the key
+//	ikey  = integer converted key
+//	sep   = key list separator (expected , : [ ] . +-*/=! 0)
+//	i     = current i (on separator)
+//	flags = cWild if wildcard
+//	err   = error
 func readKey(path []byte, i int) ([]byte, int, byte, int, int, error) {
 	l := len(path)
 	var bound byte
@@ -382,7 +387,8 @@ func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
 	}
 	if !(bytes.EqualFold(nod.Keys[0], []byte("length")) ||
 		bytes.EqualFold(nod.Keys[0], []byte("count")) ||
-		bytes.EqualFold(nod.Keys[0], []byte("size"))) {
+		bytes.EqualFold(nod.Keys[0], []byte("size")) ||
+		bytes.EqualFold(nod.Keys[0], []byte("now"))) {
 		return true, i, errPathUnknownFunction
 	}
 	nod.Type |= cFunction
@@ -581,7 +587,6 @@ func objectDeep(input []byte, nod *tNode) ([]byte, error) {
 // seek to value
 //
 // return key, i
-//
 func readObjectKey(input []byte, i int) ([]byte, int, error) {
 	l := len(input)
 	for input[i] != '"' {
@@ -610,7 +615,6 @@ func readObjectKey(input []byte, i int) ([]byte, int, error) {
 // $..[3] or $..[1,2,-3]
 //
 // recurse inside
-//
 func arrayElemByIndex(input []byte, nod *tNode, inside bool) ([]byte, error) {
 	var res []byte
 	elems, elem, err := arrayIterateElems(input, nod)
@@ -639,7 +643,6 @@ func arrayElemByIndex(input []byte, nod *tNode, inside bool) ([]byte, error) {
 // $..[1:5] or $..[5:1:-1]
 //
 // recurse inside
-//
 func arraySlice(input []byte, nod *tNode) ([]byte, error) {
 	elems, _, err := arrayIterateElems(input, nod)
 	if err != nil {
@@ -653,20 +656,22 @@ func arraySlice(input []byte, nod *tNode) ([]byte, error) {
 }
 
 // iterate over array elements
-//   cases
-//     1) $[2]    cDot: nod.Left (>0)     --> seek to elem
-//     2) $[2,3]  cDot: nod.Elems (>0)    --> scan collecting elems
-//     3) $[-3]   cDot: nod.Left (<0)     --> full scan (cFullScan)
-//     4) $[2,-3] cDot: nod.Elems (<0)    --> full scan (cFullScan)
-//     5) $[1:3]  cSlice: Left < Right    --> scan up to right --> elems
-//        5.1) terminal: return input[left:right]
-//        5.2) non-term: iterate and recurse
-//     6) .....   cSlice: other           --> full scan (cFullScan), apply bounds & recurse
-//     7) cWild, cDeep:                   --> full scan (cFullScan), apply bounds & recurse
-// returns
-//   elem   - for a single index or cDeep
-//   elems  - for a list of indexes or cDeep
 //
+//	cases
+//	  1) $[2]    cDot: nod.Left (>0)     --> seek to elem
+//	  2) $[2,3]  cDot: nod.Elems (>0)    --> scan collecting elems
+//	  3) $[-3]   cDot: nod.Left (<0)     --> full scan (cFullScan)
+//	  4) $[2,-3] cDot: nod.Elems (<0)    --> full scan (cFullScan)
+//	  5) $[1:3]  cSlice: Left < Right    --> scan up to right --> elems
+//	     5.1) terminal: return input[left:right]
+//	     5.2) non-term: iterate and recurse
+//	  6) .....   cSlice: other           --> full scan (cFullScan), apply bounds & recurse
+//	  7) cWild, cDeep:                   --> full scan (cFullScan), apply bounds & recurse
+//
+// returns
+//
+//	elem   - for a single index or cDeep
+//	elems  - for a list of indexes or cDeep
 func arrayIterateElems(input []byte, nod *tNode) (elems []tElem, elem []byte, err error) {
 	var i, s, e int
 	l := len(input)
@@ -711,7 +716,6 @@ BFOR:
 }
 
 // aggregate non-empty elems and possibly non-empty ret
-//
 func collectRecurse(input []byte, nod *tNode, elems []tElem, res []byte, inside bool) ([]byte, error) {
 	var err error
 
@@ -803,7 +807,6 @@ func subSlice(input []byte, nod *tNode, elems []tElem, i int, res []byte, inside
 // "key" has been found earlier in input json
 // If match then get value, if not match then skip value
 // return "res" with a value and "i" pointing after the value
-//
 func keyCheck(key []byte, input []byte, i int, nod *tNode, elems [][]byte, res []byte, inside bool) ([][]byte, []byte, int, error) {
 	var err error
 
@@ -919,9 +922,10 @@ func matchKeys(key []byte, nodkey []byte) bool {
 
 // get current value from input
 // returns
-//   s = start of value
-//   e = end of value
-//   i = next item
+//
+//	s = start of value
+//	e = end of value
+//	i = next item
 func valuate(input []byte, i int) (int, int, int, error) {
 	var err error
 	var s int
@@ -958,13 +962,13 @@ type tElem struct {
 // non-empty end bound always excluded;
 //
 // empty bound rules:
-//   positive step:
-//     empty start = 0
-//     empty end = last item (included)
-//   negative step:
-//     empty start = last item
-//     empty end = first item (included)
 //
+//	positive step:
+//	  empty start = 0
+//	  empty end = last item (included)
+//	negative step:
+//	  empty start = last item
+//	  empty end = first item (included)
 func adjustBounds(start int, stop int, step int, n int) (int, int, int, error) {
 	if n == 0 {
 		return 0, 0, 0, nil
@@ -1111,6 +1115,17 @@ func doFunc(input []byte, nod *tNode) ([]byte, error) {
 		} else {
 			return nil, errInvalidLengthUsage
 		}
+	} else if bytes.Equal(word("now"), nod.Keys[0]) {
+		var val interface{}
+		err = json.Unmarshal(input, &val)
+		if err != nil {
+			return nil, errInvalidNowUsage
+		}
+
+		//parse to ISO8601
+		t := time.Now().Format("2006-01-02T15:04:05.000Z")
+		result, _ := json.Marshal(t)
+		return result, nil
 	}
 	if err != nil {
 		return nil, err
