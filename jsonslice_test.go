@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -339,32 +340,43 @@ func Test_Expressions(t *testing.T) {
 func Test_FuncNow(t *testing.T) {
 
 	tests := []struct {
-		name  string
-		Query string
-		isNil bool
+		name           string
+		Query          string
+		expectedOutput func(t *testing.T) ([]byte, error)
 	}{
-		{"happy path", "$.now()", false},
-		{"invalid use of now function, will return nil", "$.x.now()", true},
-		{"invalid use of now function, will return nil root level", "$.now(\"2006-01-02T15:04:05.000Z\")", true},
+		{"happy path", "$.now()", expectedSuccessfulFuncNow},
+		{"invalid use of now function, will return nil", "$.x.now()", expectedFailFuncNow},
+		{"invalid use of now function, will return nil root level", "$.now(\"2006-01-02T15:04:05.000Z\")", expectedFailFuncNow},
 	}
 
 	for _, tst := range tests {
 		// println(tst.Query)
 		actual, _ := Get(data, tst.Query)
-		if !tst.isNil {
-			tt := time.Now().Format("2006-01-02T15:04:05.000Z")
-			expected, _ := json.Marshal(tt)
-
-			if compareSlices(actual, expected) != 0 {
-				t.Errorf("\n\ttestName:" + tst.name + "\n\ttestQuery:" + tst.Query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(actual) + "`")
-			}
-		} else {
+		expected, err := tst.expectedOutput(t)
+		if err != nil {
 			if actual != nil {
 				t.Errorf("\n\ttestName:" + tst.name + "testQuery:\n\t" + tst.Query + "\n\texpected `" + string("<nil>") + "`\n\tbut got  `" + string(actual) + "`")
 			}
+		} else {
+			if compareSlices(actual, expected) != 0 {
+				t.Errorf("\n\ttestName:" + tst.name + "\n\ttestQuery:" + tst.Query + "\n\texpected `" + string(expected) + "`\n\tbut got  `" + string(actual) + "`")
+			}
 		}
-
 	}
+}
+
+// expectedSuccessfulFuncNow return expected output for successful function time now()
+func expectedSuccessfulFuncNow(t *testing.T) ([]byte, error) {
+	t.Helper()
+	tt := time.Now().Format("2006-01-02T15:04:05.000Z")
+	expected, _ := json.Marshal(tt)
+
+	return expected, nil
+}
+
+// expectedFailFuncNow return expected output for failed function time now()
+func expectedFailFuncNow(t *testing.T) ([]byte, error) {
+	return nil, errors.New("should return nil")
 }
 
 func Test_AbstractComparison(t *testing.T) {
