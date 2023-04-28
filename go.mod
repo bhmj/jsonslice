@@ -1,4 +1,4 @@
-module github.com/bhmj/jsonslice
+module github.com/celene-isip-sp/jsonslice
 
 go 1.17
 
