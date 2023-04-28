@@ -13,7 +13,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,7 +38,8 @@ var (
 	errInvalidLengthUsage,
 	errUnexpectedStringEnd,
 	errObjectOrArrayExpected,
-	errInvalidNowUsage error
+	errInvalidNowUsage,
+	errorInvalidRFC3339 error
 )
 
 func init() {
@@ -62,7 +65,8 @@ func init() {
 	errInvalidLengthUsage = errors.New("length() is only applicable to array or string")
 	errObjectOrArrayExpected = errors.New("object or array expected")
 	errUnexpectedStringEnd = errors.New("unexpected end of string")
-	errInvalidNowUsage = errors.New("now() is only applicable to root")
+	errInvalidNowUsage = errors.New("now() is only applicable to root of a valid JSON")
+	errorInvalidRFC3339 = errors.New("RFC3339() is only applicable to string date that can be formatted to RFC3339")
 }
 
 type word []byte
@@ -389,7 +393,7 @@ func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
 		bytes.EqualFold(nod.Keys[0], []byte("count")) ||
 		bytes.EqualFold(nod.Keys[0], []byte("size")) ||
 		bytes.EqualFold(nod.Keys[0], []byte("now")) ||
-		bytes.EqualFold(nod.Keys[0], []byte("nowRFC3339"))) {
+		bytes.EqualFold(nod.Keys[0], []byte("RFC3339"))) {
 		return true, i, errPathUnknownFunction
 	}
 	nod.Type |= cFunction
@@ -1116,22 +1120,45 @@ func doFunc(input []byte, nod *tNode) ([]byte, error) {
 		} else {
 			return nil, errInvalidLengthUsage
 		}
-	} else if bytes.Equal(word("now"), nod.Keys[0]) || bytes.Equal(word("nowRFC3339"), nod.Keys[0]) {
+	} else if bytes.Equal(word("now"), nod.Keys[0]) {
 		var val interface{}
 		err = json.Unmarshal(input, &val)
 		if err != nil {
 			return nil, errInvalidNowUsage
 		}
-		var t string
-		if bytes.Equal(word("nowRFC3339"), nod.Keys[0]) {
-			//parse to RFC3339
-			t = time.Now().Format(time.RFC3339)
+
+		//parse to ISO8601
+		t := time.Now().Format("2006-01-02T15:04:05.000Z")
+		res, _ := json.Marshal(t)
+		return res, nil
+	} else if bytes.Equal(word("RFC3339"), nod.Keys[0]) {
+		if input[0] == '"' {
+			//clean input, get first string.First string is anything between the first ""
+			val := string(input)
+
+			var re = regexp.MustCompile(`\".*?\"`)
+			x := re.FindStringSubmatch(val)
+
+			if len(x) > 0 {
+				val = strings.Replace(x[0], "\"", "", 2)
+
+				//parse to RFC3339
+				t, err := time.Parse(time.RFC3339, val)
+				if err != nil {
+					return nil, errorInvalidRFC3339
+				}
+
+				res, err := json.Marshal(t)
+				if err != nil {
+					return nil, errorInvalidRFC3339
+				}
+				return res, nil
+			} else {
+				return nil, errorInvalidRFC3339
+			}
 		} else {
-			//parse to ISO8601
-			t = time.Now().Format("2006-01-02T15:04:05.000Z")
+			return nil, errorInvalidRFC3339
 		}
-		result, _ := json.Marshal(t)
-		return result, nil
 	}
 	if err != nil {
 		return nil, err
