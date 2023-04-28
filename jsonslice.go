@@ -388,7 +388,8 @@ func detectFn(path []byte, i int, nod *tNode) (bool, int, error) {
 	if !(bytes.EqualFold(nod.Keys[0], []byte("length")) ||
 		bytes.EqualFold(nod.Keys[0], []byte("count")) ||
 		bytes.EqualFold(nod.Keys[0], []byte("size")) ||
-		bytes.EqualFold(nod.Keys[0], []byte("now"))) {
+		bytes.EqualFold(nod.Keys[0], []byte("now")) ||
+		bytes.EqualFold(nod.Keys[0], []byte("nowRFC3339"))) {
 		return true, i, errPathUnknownFunction
 	}
 	nod.Type |= cFunction
@@ -1115,15 +1116,20 @@ func doFunc(input []byte, nod *tNode) ([]byte, error) {
 		} else {
 			return nil, errInvalidLengthUsage
 		}
-	} else if bytes.Equal(word("now"), nod.Keys[0]) {
+	} else if bytes.Equal(word("now"), nod.Keys[0]) || bytes.Equal(word("nowRFC3339"), nod.Keys[0]) {
 		var val interface{}
 		err = json.Unmarshal(input, &val)
 		if err != nil {
 			return nil, errInvalidNowUsage
 		}
-
-		//parse to ISO8601
-		t := time.Now().Format("2006-01-02T15:04:05.000Z")
+		var t string
+		if bytes.Equal(word("nowRFC3339"), nod.Keys[0]) {
+			//parse to RFC3339
+			t = time.Now().Format(time.RFC3339)
+		} else {
+			//parse to ISO8601
+			t = time.Now().Format("2006-01-02T15:04:05.000Z")
+		}
 		result, _ := json.Marshal(t)
 		return result, nil
 	}
