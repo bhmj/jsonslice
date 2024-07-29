@@ -1,0 +1,14 @@
+TODO
+  - $[?(...)].count()
+  - distinct
+    - suggestion:
+      - $.object.distinct(.*)                  // any nested value
+      - $.object.distinct(..*)                 // any recursive nested value
+      - $.object.distinct(.field)              // nested field
+      - $.object.distinct(..field)             // nested recursive field
+      - $.object.distinct(field[?(...)])       // syntax error: distinct does not support atomic values (string, bool, number)
+      - $.object.distinct(field[?(...)].field) // distinct filtered values
+      - and so on
+FIX
+  - $[?(@.field =~ /word word/)]
+    - not working because of space!
