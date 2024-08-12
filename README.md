@@ -180,19 +180,19 @@ goarch: amd64
 pkg: github.com/bhmj/jsonslice
 cpu: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
 ++ standard json.Unmarshal (for reference):
-Benchmark_Unmarshal-16                    398998      11268 ns/op    4272 B/op    130 allocs/op
+Benchmark_Unmarshal-16                    398998      11268 ns/op   4272 B/op   130 allocs/op
 ++ and here's a jsonslice.Get:
-Benchmark_Jsonslice_Get_Simple-16        1660604       2885 ns/op      24 B/op      1 allocs/op
+Benchmark_Jsonslice_Get_Simple-16        1660604       2885 ns/op     24 B/op     1 allocs/op
 ++ parsing is the first part of jsonslicing, here it is separately:
-Benchmark_JsonSlice_ParsePath-16        11955015        400 ns/op       0 B/op      0 allocs/op
+Benchmark_JsonSlice_ParsePath-16        11955015        400 ns/op      0 B/op     0 allocs/op
 ++ aggregating non-contiguous elements may take a bit longer (extra mallocs involved):
-Benchmark_Jsonslice_Get_Aggregated-16    1000000       4335 ns/op     313 B/op     10 allocs/op
+Benchmark_Jsonslice_Get_Aggregated-16    1000000       4335 ns/op    313 B/op    10 allocs/op
 ++ standard json.Unmarshal of a large json (10 Mb):
-Benchmark_Unmarshal_10Mb-16                  100   40787414 ns/op     224 B/op      5 allocs/op
+Benchmark_Unmarshal_10Mb-16                  100   40787414 ns/op    224 B/op     5 allocs/op
 ++ jsonslicing the same json, target element is at the start:
-Benchmark_Jsonslice_Get_10Mb_First-16    3459492       1370 ns/op      24 B/op      1 allocs/op
+Benchmark_Jsonslice_Get_10Mb_First-16    3459492       1370 ns/op     24 B/op     1 allocs/op
 ++ jsonslicing the same json, target element is at the end: still beats Unmarshal
-Benchmark_Jsonslice_Get_10Mb_Last-16         133   35731931 ns/op      54 B/op      1 allocs/op
+Benchmark_Jsonslice_Get_10Mb_Last-16         133   35731931 ns/op     54 B/op     1 allocs/op
 PASS
 ok      github.com/bhmj/jsonslice       52.452s
 ```
