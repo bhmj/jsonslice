@@ -21,10 +21,8 @@ func readQuotedKey(path []byte, i int) ([]byte, int, error) {
 			if err != nil {
 				return nil, i, err
 			}
-			if !copying {
-				copying = true                             // start copying
-				result = append(result, path[s:before]...) // copy from the start
-			}
+			copying = true
+			result = append(result, path[s:before]...)
 			result = append(result, esc...)
 			s = i // we want to bulk append the rest
 		} else {
@@ -118,6 +116,21 @@ func readUnicodeSequence(length int, path []byte, i int) ([]byte, int, error) {
 	}
 	if i == l && num < length {
 		return nil, i, errPathUnexpectedEnd
+	}
+	// Supplementary characters use two adjacent UTF16 escapes in JSON.
+	if length == 4 && codepoint >= 0xD800 && codepoint <= 0xDBFF &&
+		l-i >= 6 && path[i] == '\\' && path[i+1] == 'u' {
+		low := uint32(0)
+		for j := i + 2; j < i+6; j++ {
+			low, err = readNextHexNum(low, path[j])
+			if err != nil {
+				return nil, j, err
+			}
+		}
+		if low >= 0xDC00 && low <= 0xDFFF {
+			codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + low - 0xDC00
+			i += 6
+		}
 	}
 	res, err := codepointToUTF8(codepoint)
 	return res, i, err
