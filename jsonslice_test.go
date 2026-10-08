@@ -640,6 +640,67 @@ func Test_Unicode(t *testing.T) {
 	}
 }
 
+func Test_UnicodeEscapedKeys(t *testing.T) {
+	keys := []struct {
+		Name    string
+		Literal string
+		Pair    string
+		Long    string
+	}{
+		{"emoji", "\U0001F600", `\ud83d\ude00`, `\U0001F600`},
+		{"music", "\U0001D11E", `\uD834\uDD1E`, `\U0001D11E`},
+		{"minimum", "\U00010000", `\uD800\uDC00`, `\U00010000`},
+		{"maximum", "\U0010FFFF", `\uDBFF\uDFFF`, `\U0010FFFF`},
+		{"adjacent", "\U0001F600\U0001D11E", `\uD83D\uDE00\uD834\uDD1E`, `\U0001F600\U0001D11E`},
+		{"mixed", "a\U0001F600b\u00F6c", `a\ud83d\ude00b\u00F6c`, `a\U0001F600b\u00F6c`},
+		{"bmp", "a\u00F6b\u00E9c", `a\u00F6b\u00E9c`, `a\U000000F6b\U000000E9c`},
+	}
+	for _, key := range keys {
+		for inputIndex, inputKey := range []string{key.Literal, key.Pair} {
+			input := []byte(`{"` + inputKey + `":42,"other":7}`)
+			for pathIndex, pathKey := range []string{key.Literal, key.Pair, key.Long} {
+				for notationIndex, query := range []string{`$["` + pathKey + `"]`, `$."` + pathKey + `"`} {
+					name := fmt.Sprintf("%s/json%d/path%d/notation%d", key.Name, inputIndex, pathIndex, notationIndex)
+					t.Run(name, func(t *testing.T) {
+						result, err := Get(input, query)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if string(result) != "42" {
+							t.Fatalf("Get(%s, %q) = %q, want 42", input, query, result)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
+func Test_UnicodeEscapedKeyDistinctions(t *testing.T) {
+	input := []byte(`{"a\u00F6b\u00E9c":42,"a\u00F6\u00E9c":7}`)
+	for _, query := range []string{`$["a\u00F6\u00E9c"]`, `$["aöéc"]`} {
+		t.Run(query, func(t *testing.T) {
+			result, err := Get(input, query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(result) != "7" {
+				t.Fatalf("Get(%s, %q) = %q, want 7", input, query, result)
+			}
+		})
+	}
+}
+
+func Test_UnicodeMalformedPairEscapes(t *testing.T) {
+	for _, query := range []string{`$["\uD83D\uDE0"]`, `$["\uD83D\uDE0`, `$["\uD83D\uDE0Z"]`, `$["\uD83D\u"]`} {
+		t.Run(query, func(t *testing.T) {
+			if _, err := Get([]byte(`{}`), query); err == nil {
+				t.Fatal("expected an error for an incomplete or invalid Unicode escape")
+			}
+		})
+	}
+}
+
 func Test_Errors(t *testing.T) {
 
 	tests := []struct {
